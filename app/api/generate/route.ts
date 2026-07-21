@@ -61,7 +61,8 @@ export async function POST(request: Request) {
 
     let identityBytes = sceneBytes;
     let identityType = "image/jpeg";
-    if (identity instanceof File && identity.size > 0) {
+    const hasUploadedIdentity = identity instanceof File && identity.size > 0;
+    if (hasUploadedIdentity) {
       if (identity.size > 4 * 1024 * 1024 || !["image/jpeg", "image/png", "image/webp"].includes(identity.type)) {
         return Response.json({ code: "INVALID_IMAGE", message: "人像图片需为 JPEG、PNG 或 WebP，且不超过 4MB", requestId }, { status: 400 });
       }
@@ -75,17 +76,17 @@ export async function POST(request: Request) {
       timeout: 95_000,
       maxRetries: 0,
     });
-    const images = await Promise.all([
-      toFile(sceneBytes, "scene.jpg", { type: "image/jpeg" }),
-      toFile(sceneBytes, "look.jpg", { type: "image/jpeg" }),
-      toFile(identityBytes, "identity", { type: identityType }),
-    ]);
+    const imageInputs = [toFile(sceneBytes, "scene-and-look.jpg", { type: "image/jpeg" })];
+    if (hasUploadedIdentity) imageInputs.push(toFile(identityBytes, "identity", { type: identityType }));
+    const images = await Promise.all(imageInputs);
 
+    const identityInstruction = hasUploadedIdentity
+      ? "Image 2 is the identity reference. Replace the model in Image 1 with the recognizable adult person from Image 2."
+      : "Preserve the recognizable adult person already shown in Image 1, but re-render the shot as a new polished fashion photograph.";
     const prompt = `Create one photorealistic vertical fashion image.
-Image 1 is the authoritative background scene and composition reference.
-Image 2 is the authoritative complete outfit reference.
-Image 3 is the identity reference. Preserve the recognizable facial identity from Image 3.
-Replace the model in Image 1 with the person from Image 3 while keeping the full outfit from Image 2 and the original scene atmosphere.
+Image 1 is the authoritative background, composition, and complete outfit reference.
+${identityInstruction}
+Keep the full outfit and original scene atmosphere from Image 1.
 Use an approximate height of ${heightCm} cm and weight range ${weightLabels[weightRange]} for natural body proportions.
 The requested styling direction is ${outfitStyle === "menswear" ? "menswear" : "womenswear"}.
 Show exactly one adult person. Keep anatomy natural. Do not add text, logos, watermarks, extra garments, or unrelated accessories.`;
@@ -94,7 +95,7 @@ Show exactly one adult person. Keep anatomy natural. Do not add text, logos, wat
       model: process.env.IMAGE_API_MODEL ?? "gpt-image-2",
       image: images,
       prompt,
-      size: "768x1152",
+      size: "512x768",
       quality: "low",
       output_format: "jpeg",
       output_compression: 85,

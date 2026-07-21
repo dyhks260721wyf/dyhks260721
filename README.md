@@ -35,7 +35,7 @@ IMAGE_API_MODEL=gpt-image-2
 IMAGE_API_FALLBACK=true
 ```
 
-前端不会接触 API Key。服务端使用兼容 SDK 并通过 `baseURL` 只访问第三方网关，按场景图、完整 Look 图、人物图的顺序调用 Image Edits API。为避免网关长时间重试，单次请求上限为 95 秒且不自动重试；无 Key、网关超时或 5xx 时可以返回明确标记的本地演示结果，保证现场链路可继续。
+前端不会接触 API Key。服务端使用兼容 SDK 并通过 `baseURL` 只访问第三方网关：演示人物只发送一张合并了场景与完整 Look 的参考图，上传人物时再附加第二张身份图，然后调用 Image Edits API。P0 输出为 512×768、低质量 JPEG；单次请求上限为 95 秒且不自动重试。无 Key、网关超时或 5xx 时可以返回明确标记的本地演示结果，保证现场链路可继续。
 
 ## 参考项目
 
