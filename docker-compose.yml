@@ -1,0 +1,11 @@
+services:
+  web:
+    build: .
+    restart: unless-stopped
+    environment:
+      IMAGE_API_BASE_URL: ${IMAGE_API_BASE_URL:-https://api.8989886.xyz/v1}
+      IMAGE_API_KEY: ${IMAGE_API_KEY:-}
+      IMAGE_API_MODEL: ${IMAGE_API_MODEL:-gpt-image-2}
+      IMAGE_API_FALLBACK: ${IMAGE_API_FALLBACK:-true}
+    ports:
+      - "127.0.0.1:3000:3000"
