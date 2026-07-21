@@ -2,24 +2,41 @@
 
 import {
   ArrowLeft,
+  Bell,
   Bookmark,
   Camera,
   Check,
+  CheckCircle2,
   ChevronDown,
+  ChevronRight,
   Download,
+  Grid2X2,
   Heart,
+  Home,
   ImagePlus,
+  Images,
   MessageCircle,
   MoreHorizontal,
+  Music2,
   Pause,
   Play,
+  Plus,
   RotateCcw,
+  Ruler,
+  ScanFace,
   Search,
   Send,
+  ShieldCheck,
   Share2,
   ShoppingBag,
+  ShoppingCart,
   Sparkles,
+  Star,
+  Store,
+  Truck,
   Upload,
+  User,
+  UserRound,
   Volume2,
   WandSparkles,
   X,
@@ -29,19 +46,41 @@ import type { HotspotPreset, ProductPreset, VideoPreset } from "@/lib/content";
 
 type OpenSheet = "search" | "comments" | null;
 type EntrySource = "pause_tag" | "ai_analysis";
+type CommentTab = "comments" | "analysis" | "tryon";
+type AppScreen = "feed" | "shop" | "messages" | "assets" | "publish";
+
+type GeneratedAsset = {
+  id: string;
+  imageUrl: string;
+  video: VideoPreset;
+  description: string;
+  createdAt: string;
+};
 
 export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const [openSheet, setOpenSheet] = useState<OpenSheet>(null);
   const [selectedHotspot, setSelectedHotspot] = useState<HotspotPreset | null>(null);
-  const [commentTab, setCommentTab] = useState<"comments" | "analysis">("comments");
+  const [commentTab, setCommentTab] = useState<CommentTab>("comments");
   const [tryOn, setTryOn] = useState<{ open: boolean; source: EntrySource }>({ open: false, source: "pause_tag" });
   const [introVisible, setIntroVisible] = useState(true);
   const [saved, setSaved] = useState<string[]>([]);
+  const [screen, setScreen] = useState<AppScreen>("feed");
+  const [assets, setAssets] = useState<GeneratedAsset[]>([]);
+  const [activeAsset, setActiveAsset] = useState<GeneratedAsset | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<ProductPreset | null>(null);
   const feedRef = useRef<HTMLDivElement>(null);
 
   const activeVideo = initialVideos[activeIndex] ?? initialVideos[0];
+  const allProducts = useMemo(() => initialVideos.flatMap((video) => video.products), [initialVideos]);
+  const publishAsset = activeAsset ?? assets[0] ?? {
+    id: `demo-${activeVideo.id}`,
+    imageUrl: activeVideo.posterUrl,
+    video: activeVideo,
+    description: `在${activeVideo.location}，把原视频的完整 Look 换到自己的形象上。`,
+    createdAt: "刚刚",
+  };
 
   useEffect(() => {
     setPaused(false);
@@ -62,7 +101,7 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
     setOpenSheet("search");
   }
 
-  function openComments(tab: "comments" | "analysis" = "comments") {
+  function openComments(tab: CommentTab = "comments") {
     setPaused(true);
     setCommentTab(tab);
     setOpenSheet("comments");
@@ -75,6 +114,29 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
 
   function toggleSaved(videoId: string) {
     setSaved((current) => current.includes(videoId) ? current.filter((id) => id !== videoId) : [...current, videoId]);
+  }
+
+  function changeScreen(next: AppScreen) {
+    setIntroVisible(false);
+    setOpenSheet(null);
+    setScreen(next);
+    setActiveAsset(null);
+  }
+
+  function saveAsset(asset: GeneratedAsset) {
+    setAssets((current) => [asset, ...current.filter((item) => item.id !== asset.id)]);
+    setActiveAsset(asset);
+  }
+
+  function jumpToOriginal(videoId: string) {
+    const index = initialVideos.findIndex((video) => video.id === videoId);
+    if (index >= 0) {
+      setActiveIndex(index);
+      setScreen("feed");
+      setActiveAsset(null);
+      setTryOn((value) => ({ ...value, open: false }));
+      requestAnimationFrame(() => feedRef.current?.scrollTo({ top: index * feedRef.current.clientHeight, behavior: "smooth" }));
+    }
   }
 
   return (
@@ -93,11 +155,11 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
       </aside>
 
       <section className="device-frame" aria-label="场景化穿搭短视频体验">
-        <div className="top-tabs">
+        {screen === "feed" && <div className="top-tabs">
           <button type="button">关注</button>
           <button className="active" type="button">推荐</button>
           <button className="top-search" type="button" aria-label="搜索"><Search size={21} /></button>
-        </div>
+        </div>}
 
         <div className="video-feed" ref={feedRef} onScroll={handleFeedScroll}>
           {initialVideos.map((video, index) => (
@@ -116,16 +178,21 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
           ))}
         </div>
 
-        <nav className="bottom-nav" aria-label="主导航">
-          <button className="active" type="button">首页</button>
-          <button type="button">商城</button>
-          <button className="publish-button" type="button" aria-label="发布"><span /></button>
-          <button type="button">消息</button>
-          <button type="button">我</button>
-        </nav>
+        {screen !== "feed" && (
+          <div className="app-screen-layer">
+            {screen === "shop" && <ShopScreen products={allProducts} onOpenProduct={setSelectedProduct} />}
+            {screen === "messages" && <MessagesScreen />}
+            {screen === "assets" && (activeAsset
+              ? <AssetDetailScreen asset={activeAsset} onBack={() => setActiveAsset(null)} onPublish={() => changeScreen("publish")} onJumpOriginal={() => jumpToOriginal(activeAsset.video.id)} onOpenProduct={setSelectedProduct} />
+              : <AssetLibraryScreen assets={assets} videos={initialVideos} saved={saved} onOpenAsset={setActiveAsset} onJumpOriginal={jumpToOriginal} />)}
+            {screen === "publish" && <PublishScreen asset={publishAsset} onBack={() => changeScreen("assets")} onJumpOriginal={() => jumpToOriginal(publishAsset.video.id)} onOpenProduct={setSelectedProduct} />}
+          </div>
+        )}
+
+        <BottomNavigation active={screen} onChange={changeScreen} />
 
         {openSheet === "search" && selectedHotspot && (
-          <VisualSearchSheet video={activeVideo} hotspot={selectedHotspot} onClose={() => setOpenSheet(null)} />
+          <VisualSearchSheet video={activeVideo} hotspot={selectedHotspot} onClose={() => setOpenSheet(null)} onOpenProduct={setSelectedProduct} />
         )}
 
         {openSheet === "comments" && (
@@ -143,8 +210,14 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
             video={activeVideo}
             entrySource={tryOn.source}
             onClose={() => setTryOn((value) => ({ ...value, open: false }))}
+            onSaveAsset={saveAsset}
+            onOpenProduct={setSelectedProduct}
+            onPublish={(asset) => { saveAsset(asset); setTryOn((value) => ({ ...value, open: false })); setScreen("publish"); }}
+            onJumpOriginal={() => jumpToOriginal(activeVideo.id)}
           />
         )}
+
+        {selectedProduct && <ProductDetail product={selectedProduct} onClose={() => setSelectedProduct(null)} />}
 
         {introVisible && <IntroOverlay onStart={() => setIntroVisible(false)} />}
       </section>
@@ -240,6 +313,18 @@ function RailAction({ children, label, active = false, onClick }: { children: Re
   return <button className={`rail-action ${active ? "active" : ""}`} type="button" onClick={onClick}>{children}<span>{label}</span></button>;
 }
 
+function BottomNavigation({ active, onChange }: { active: AppScreen; onChange: (screen: AppScreen) => void }) {
+  return (
+    <nav className="bottom-nav" aria-label="主导航">
+      <button className={active === "feed" ? "active" : ""} type="button" onClick={() => onChange("feed")}><Home size={17} /><span>首页</span></button>
+      <button className={active === "shop" ? "active" : ""} type="button" onClick={() => onChange("shop")}><Store size={17} /><span>商城</span></button>
+      <button className={`publish-button ${active === "publish" ? "active" : ""}`} type="button" aria-label="发布" onClick={() => onChange("publish")}><span><Plus size={20} /></span></button>
+      <button className={active === "messages" ? "active" : ""} type="button" onClick={() => onChange("messages")}><Bell size={17} /><span>消息</span></button>
+      <button className={active === "assets" ? "active" : ""} type="button" onClick={() => onChange("assets")}><User size={17} /><span>我</span></button>
+    </nav>
+  );
+}
+
 function SheetHeader({ title, eyebrow, onClose }: { title: string; eyebrow?: string; onClose: () => void }) {
   return (
     <header className="sheet-header">
@@ -249,7 +334,7 @@ function SheetHeader({ title, eyebrow, onClose }: { title: string; eyebrow?: str
   );
 }
 
-function VisualSearchSheet({ video, hotspot, onClose }: { video: VideoPreset; hotspot: HotspotPreset; onClose: () => void }) {
+function VisualSearchSheet({ video, hotspot, onClose, onOpenProduct }: { video: VideoPreset; hotspot: HotspotPreset; onClose: () => void; onOpenProduct: (product: ProductPreset) => void }) {
   const [tab, setTab] = useState<"mixed" | "products">("mixed");
   const products = video.products.filter((product) => hotspot.productIds.includes(product.id));
   const fallbackProducts = products.length ? products : video.products;
@@ -269,7 +354,7 @@ function VisualSearchSheet({ video, hotspot, onClose }: { video: VideoPreset; ho
           <button className={tab === "products" ? "active" : ""} type="button" onClick={() => setTab("products")}>商品</button>
         </div>
         <div className="product-grid">
-          {fallbackProducts.map((product) => <ProductCard key={product.id} product={product} />)}
+          {fallbackProducts.map((product) => <ProductCard key={product.id} product={product} onOpen={() => onOpenProduct(product)} />)}
           {tab === "mixed" && (
             <article className="related-card">
               <img src={video.posterUrl} alt="同单品其他场景" />
@@ -283,16 +368,16 @@ function VisualSearchSheet({ video, hotspot, onClose }: { video: VideoPreset; ho
   );
 }
 
-function ProductCard({ product }: { product: ProductPreset }) {
+function ProductCard({ product, onOpen }: { product: ProductPreset; onOpen?: () => void }) {
   return (
-    <article className="product-card">
+    <article className="product-card" onClick={onOpen}>
       <div className="product-image"><img src={product.imageUrl} style={{ objectPosition: product.imagePosition }} alt={product.name} /><span>{product.category}</span></div>
-      <div className="product-info"><strong>{product.name}</strong><p>{product.note}</p><div><b>{product.priceLabel}</b><button type="button"><ShoppingBag size={15} />查看</button></div></div>
+      <div className="product-info"><strong>{product.name}</strong><p>{product.note}</p><div><b>{product.priceLabel}</b><button type="button" onClick={(event) => { event.stopPropagation(); onOpen?.(); }}><ShoppingBag size={15} />查看</button></div></div>
     </article>
   );
 }
 
-function CommentsSheet({ video, tab, onTabChange, onClose, onTryOn }: { video: VideoPreset; tab: "comments" | "analysis"; onTabChange: (tab: "comments" | "analysis") => void; onClose: () => void; onTryOn: () => void }) {
+function CommentsSheet({ video, tab, onTabChange, onClose, onTryOn }: { video: VideoPreset; tab: CommentTab; onTabChange: (tab: CommentTab) => void; onClose: () => void; onTryOn: () => void }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const comments = [
     ["山茶", "这个配色和背景太贴了，像从湖里取的颜色。", "18分钟前"],
@@ -307,6 +392,7 @@ function CommentsSheet({ video, tab, onTabChange, onClose, onTryOn }: { video: V
         <div className="comment-tabs">
           <button className={tab === "comments" ? "active" : ""} type="button" onClick={() => onTabChange("comments")}>评论 <span>{video.counts.comments}</span></button>
           <button className={tab === "analysis" ? "active" : ""} type="button" onClick={() => onTabChange("analysis")}><Sparkles size={14} /> AI 解析</button>
+          <button className={tab === "tryon" ? "active" : ""} type="button" onClick={() => onTabChange("tryon")}><WandSparkles size={14} /> AI 上身</button>
           <button className="comment-close" type="button" onClick={onClose} aria-label="关闭"><X size={20} /></button>
         </div>
 
@@ -320,7 +406,7 @@ function CommentsSheet({ video, tab, onTabChange, onClose, onTryOn }: { video: V
               </article>
             ))}
           </div>
-        ) : (
+        ) : tab === "analysis" ? (
           <div className="analysis-panel">
             <div className="analysis-heading"><span><Sparkles size={16} /> AI 内容摘要</span><small>内容由 AI 辅助生成，请结合实际判断</small></div>
             <p className="analysis-summary">{video.analysis.summary}</p>
@@ -336,8 +422,17 @@ function CommentsSheet({ video, tab, onTabChange, onClose, onTryOn }: { video: V
               ))}
             </div>
           </div>
+        ) : (
+          <div className="tryon-tab-panel">
+            <div className="tryon-tab-visual"><img src={video.posterUrl} alt="AI 上身场景预览" /><div className="tryon-tab-scan"><ScanFace size={27} /><span>人物形象</span></div><div className="tryon-tab-plus">+</div><div className="tryon-tab-look"><WandSparkles size={27} /><span>完整 Look</span></div></div>
+            <p className="eyebrow">AI TRY-ON</p>
+            <h3>把视频里的整套穿搭，<br />放进你的形象。</h3>
+            <p>录入一张清晰人像和基础身材信息。生成时保留原场景、原穿搭与画面氛围。</p>
+            <div className="tryon-tab-benefits"><span><ShieldCheck size={15} />人像授权确认</span><span><Images size={15} />结果存入 AIGC 相册</span></div>
+            <button className="flow-primary" type="button" onClick={onTryOn}><Camera size={18} />开始录入形象</button>
+          </div>
         )}
-        <div className="comment-input"><span>{tab === "analysis" ? "问 AI 或按住说话" : "留下你的评论"}</span><MoreHorizontal size={20} /><Send size={18} /></div>
+        {tab !== "tryon" && <div className="comment-input"><span>{tab === "analysis" ? "问 AI 或按住说话" : "留下你的评论"}</span><MoreHorizontal size={20} /><Send size={18} /></div>}
       </section>
     </div>
   );
@@ -358,7 +453,15 @@ function IntroOverlay({ onStart }: { onStart: () => void }) {
   );
 }
 
-function TryOnFlow({ video, entrySource, onClose }: { video: VideoPreset; entrySource: EntrySource; onClose: () => void }) {
+function TryOnFlow({ video, entrySource, onClose, onSaveAsset, onOpenProduct, onPublish, onJumpOriginal }: {
+  video: VideoPreset;
+  entrySource: EntrySource;
+  onClose: () => void;
+  onSaveAsset: (asset: GeneratedAsset) => void;
+  onOpenProduct: (product: ProductPreset) => void;
+  onPublish: (asset: GeneratedAsset) => void;
+  onJumpOriginal: () => void;
+}) {
   const [step, setStep] = useState(0);
   const [identityFile, setIdentityFile] = useState<File | null>(null);
   const [identityPreview, setIdentityPreview] = useState<string | null>(null);
@@ -366,16 +469,17 @@ function TryOnFlow({ video, entrySource, onClose }: { video: VideoPreset; entryS
   const [heightCm, setHeightCm] = useState(168);
   const [weightRange, setWeightRange] = useState("50_60");
   const [outfitStyle, setOutfitStyle] = useState("womenswear");
+  const [bodyType, setBodyType] = useState("hourglass");
   const [consent, setConsent] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [resultMode, setResultMode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [resultSaved, setResultSaved] = useState(false);
 
   useEffect(() => () => {
     if (identityPreview) URL.revokeObjectURL(identityPreview);
-    if (resultUrl) URL.revokeObjectURL(resultUrl);
-  }, [identityPreview, resultUrl]);
+  }, [identityPreview]);
 
   function chooseFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -413,8 +517,8 @@ function TryOnFlow({ video, entrySource, onClose }: { video: VideoPreset; entryS
         throw new Error(payload.message ?? "生成没有完成");
       }
       const blob = await response.blob();
-      if (resultUrl) URL.revokeObjectURL(resultUrl);
-      setResultUrl(URL.createObjectURL(blob));
+      const dataUrl = await blobToDataUrl(blob);
+      setResultUrl(dataUrl);
       setResultMode(response.headers.get("X-Demo-Mode"));
       setStep(3);
     } catch (caught) {
@@ -430,6 +534,29 @@ function TryOnFlow({ video, entrySource, onClose }: { video: VideoPreset; entryS
     anchor.href = resultUrl;
     anchor.download = `scene-fit-${video.id}.jpg`;
     anchor.click();
+  }
+
+  function buildAsset(): GeneratedAsset | null {
+    if (!resultUrl) return null;
+    return {
+      id: `${video.id}-${Date.now()}`,
+      imageUrl: resultUrl,
+      video,
+      description: `在${video.location}的光线里，完整复刻这套 ${video.analysis.tags.slice(0, 2).join("、")} Look。`,
+      createdAt: "刚刚",
+    };
+  }
+
+  function saveResult() {
+    const asset = buildAsset();
+    if (!asset) return;
+    onSaveAsset(asset);
+    setResultSaved(true);
+  }
+
+  function publishResult() {
+    const asset = buildAsset();
+    if (asset) onPublish(asset);
   }
 
   const stepTitle = ["选择你的形象", "补充身材信息", "确认生成输入", "你的场景 Look"][step];
@@ -456,7 +583,12 @@ function TryOnFlow({ video, entrySource, onClose }: { video: VideoPreset; entryS
                 {identityPreview && <span><Upload size={15} /> 已选择我的照片</span>}
               </label>
             </div>
-            <div className="privacy-note"><ImagePlus size={17} /><p>第一版支持单张清晰正面照。正式版将增加正面、左右侧脸与全身参考。</p></div>
+            <div className="capture-actions">
+              <label><Camera size={17} />拍摄人脸<input type="file" accept="image/*" capture="user" onChange={chooseFile} /></label>
+              <label><Upload size={17} />从相册选择<input type="file" accept="image/jpeg,image/png,image/webp" onChange={chooseFile} /></label>
+            </div>
+            <div className="face-guide"><span><ScanFace size={17} />录入提示</span><div>{["正脸", "左脸", "右脸", "抬头", "低头"].map((item, index) => <i key={item} className={index === 0 && !useDemoIdentity ? "done" : ""}>{index === 0 && !useDemoIdentity && <Check size={11} />}{item}</i>)}</div></div>
+            <div className="privacy-note"><ShieldCheck size={17} /><p>仅上传本人或已获授权的人像；图片用于本次生成与个人 AIGC 相册，不用于身份识别。</p></div>
             {error && <p className="form-error">{error}</p>}
             <button className="flow-primary" type="button" onClick={() => setStep(1)}>继续填写身材</button>
           </div>
@@ -466,6 +598,12 @@ function TryOnFlow({ video, entrySource, onClose }: { video: VideoPreset; entryS
           <div className="flow-body profile-step">
             <label className="field-label">穿搭方向</label>
             <div className="segmented"><button className={outfitStyle === "womenswear" ? "active" : ""} type="button" onClick={() => setOutfitStyle("womenswear")}>女士穿搭</button><button className={outfitStyle === "menswear" ? "active" : ""} type="button" onClick={() => setOutfitStyle("menswear")}>男士穿搭</button></div>
+            <label className="field-label">身材类型</label>
+            <div className="body-type-grid">
+              {[["hourglass", "沙漏型"], ["triangle", "倒三角"], ["pear", "梨型"], ["rectangle", "直筒型"]].map(([value, label], index) => (
+                <button className={bodyType === value ? "active" : ""} key={value} type="button" onClick={() => setBodyType(value)}><span className={`body-shape shape-${index}`}><UserRound size={31} /></span><strong>{label}</strong>{bodyType === value && <CheckCircle2 size={14} />}</button>
+              ))}
+            </div>
             <label className="field-label" htmlFor="height">身高 <strong>{heightCm} cm</strong></label>
             <input id="height" className="height-range" type="range" min="140" max="210" value={heightCm} onChange={(event) => setHeightCm(Number(event.target.value))} />
             <div className="range-labels"><span>140</span><span>175</span><span>210</span></div>
@@ -485,7 +623,7 @@ function TryOnFlow({ video, entrySource, onClose }: { video: VideoPreset; entryS
               <article><img src={video.posterUrl} alt="完整 Look" /><span>02 / LOOK</span><strong>{video.products.length} 件完整穿搭</strong></article>
               <article><img src={useDemoIdentity ? video.posterUrl : identityPreview ?? video.posterUrl} alt="人物" /><span>03 / 人物</span><strong>{useDemoIdentity ? "演示人物" : "我的照片"}</strong></article>
             </div>
-            <div className="profile-summary"><span>{outfitStyle === "womenswear" ? "女士穿搭" : "男士穿搭"}</span><span>{heightCm} cm</span><span>{weightRange.replace("_", "–")} kg</span></div>
+            <div className="profile-summary"><span>{outfitStyle === "womenswear" ? "女士穿搭" : "男士穿搭"}</span><span>{bodyType === "hourglass" ? "沙漏型" : bodyType === "triangle" ? "倒三角" : bodyType === "pear" ? "梨型" : "直筒型"}</span><span>{heightCm} cm</span><span>{weightRange.replace("_", "–")} kg</span></div>
             <label className="consent-row"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><i>{consent && <Check size={14} />}</i><span>我确认使用本人或已获授权的人像，并同意将图片发送至图像生成服务处理。</span></label>
             {error && <p className="form-error">{error}</p>}
             <button className="flow-primary generate-button" disabled={generating} type="submit">{generating ? <><span className="spinner" />正在融合场景与 Look</> : <><WandSparkles size={18} />生成我的场景 Look</>}</button>
@@ -499,13 +637,141 @@ function TryOnFlow({ video, entrySource, onClose }: { video: VideoPreset; entryS
             <div className="result-topline"><span><Sparkles size={14} /> {resultMode === "compatible-gateway" ? "GPT Image 2 生成" : resultMode === "gateway-fallback" ? "网关超时 · 演示结果" : "本地演示结果"}</span><small>{video.location}</small></div>
             <div className="result-panel">
               <h4>你已经在这个场景里了。</h4>
-              <p>场景、完整 Look 与人物形象已合并为一张可保存资产。</p>
-              <div className="result-actions"><button type="button" onClick={downloadResult}><Download size={18} />保存</button><button type="button" onClick={() => setStep(2)}><RotateCcw size={18} />再生成</button><button type="button"><Share2 size={18} />分享</button></div>
-              <button className="shop-look" type="button"><ShoppingBag size={18} />查看这套 Look 的 {video.products.length} 件商品</button>
+              <p>{`画面保留了${video.location}的氛围与原视频 Look，让人物更自然地融入场景。`}</p>
+              <div className="result-actions"><button type="button" onClick={saveResult}>{resultSaved ? <CheckCircle2 size={18} /> : <Bookmark size={18} />}{resultSaved ? "已收藏" : "收藏图片"}</button><button type="button" onClick={downloadResult}><Download size={18} />下载</button><button type="button" onClick={() => setStep(2)}><RotateCcw size={18} />再生成</button></div>
+              <div className="result-publish-row"><button type="button" onClick={publishResult}><Sparkles size={18} />一键发布</button><button type="button" onClick={onJumpOriginal}><Music2 size={17} />原视频 / 原声</button></div>
+              <div className="result-products-heading"><div><span>搭配同款</span><strong>把画面变成可买的 Look</strong></div><ShoppingCart size={20} /></div>
+              <div className="result-product-grid">{video.products.map((product) => <ProductCard key={product.id} product={product} onOpen={() => onOpenProduct(product)} />)}</div>
+              <button className="shop-look" type="button" onClick={() => onOpenProduct(video.products[0])}><ShoppingBag size={18} />查看这套 Look 的 {video.products.length} 件商品</button>
               <button className="back-feed" type="button" onClick={onClose}>返回继续刷视频</button>
             </div>
           </div>
         )}
+      </section>
+    </div>
+  );
+}
+
+function blobToDataUrl(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("无法读取生成图片"));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function ScreenHeader({ eyebrow, title, action }: { eyebrow: string; title: string; action?: React.ReactNode }) {
+  return <header className="screen-header"><div><span>{eyebrow}</span><h2>{title}</h2></div>{action}</header>;
+}
+
+function ShopScreen({ products, onOpenProduct }: { products: ProductPreset[]; onOpenProduct: (product: ProductPreset) => void }) {
+  const [query, setQuery] = useState("");
+  const visibleProducts = products.filter((product) => `${product.name}${product.category}${product.note}`.includes(query));
+  return (
+    <section className="app-screen shop-screen">
+      <ScreenHeader eyebrow="SCENE SHOP" title="从场景找到同款" action={<button type="button" aria-label="购物袋"><ShoppingBag size={20} /></button>} />
+      <label className="screen-search"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索单品、场景或风格" /></label>
+      <div className="category-row">{["全部", "外套", "裤装", "配饰", "帽子"].map((item) => <button type="button" key={item} onClick={() => setQuery(item === "全部" ? "" : item)}>{item}</button>)}</div>
+      <div className="shop-editorial"><img src="/media/images/museum-look.jpg" alt="建筑感通勤搭配" /><div><span>SCENE EDIT 03</span><strong>把建筑的硬线条，穿进通勤。</strong><small>本周 7 件场景单品</small></div></div>
+      <div className="screen-product-grid">{visibleProducts.map((product) => <ProductCard key={product.id} product={product} onOpen={() => onOpenProduct(product)} />)}</div>
+    </section>
+  );
+}
+
+function MessagesScreen() {
+  const messages = [
+    { icon: <Sparkles size={19} />, title: "AI 生成完成", text: "你的场景 Look 已生成，可前往 AIGC 相册查看。", time: "刚刚" },
+    { icon: <ShoppingBag size={19} />, title: "同款价格更新", text: "你收藏的象牙白肌理外套有新的优惠。", time: "12:30" },
+    { icon: <Heart size={19} />, title: "互动消息", text: "山茶赞了你的场景穿搭。", time: "昨天" },
+  ];
+  return (
+    <section className="app-screen messages-screen">
+      <ScreenHeader eyebrow="INBOX" title="消息" action={<button type="button" aria-label="更多"><MoreHorizontal size={21} /></button>} />
+      <div className="message-filter"><button className="active" type="button">全部</button><button type="button">互动</button><button type="button">订单</button></div>
+      <div className="message-list">{messages.map((message) => <article key={message.title}><i>{message.icon}</i><div><strong>{message.title}</strong><p>{message.text}</p></div><span>{message.time}</span></article>)}</div>
+    </section>
+  );
+}
+
+function AssetLibraryScreen({ assets, videos, saved, onOpenAsset, onJumpOriginal }: { assets: GeneratedAsset[]; videos: VideoPreset[]; saved: string[]; onOpenAsset: (asset: GeneratedAsset) => void; onJumpOriginal: (videoId: string) => void }) {
+  const [tab, setTab] = useState<"assets" | "saved">("assets");
+  const demoAssets: GeneratedAsset[] = assets.length ? assets : videos.slice(0, 2).map((video, index) => ({
+    id: `preview-${video.id}`,
+    imageUrl: video.posterUrl,
+    video,
+    description: index === 0 ? "雪线之下的柔光，适合一套低饱和叠穿。" : "雨后霓虹给酒红皮衣加上第二层光。",
+    createdAt: index === 0 ? "今天" : "昨天",
+  }));
+  const savedVideos = videos.filter((video) => saved.includes(video.id));
+  return (
+    <section className="app-screen asset-screen">
+      <div className="profile-hero"><img src="/media/images/alpine-look.jpg" alt="个人主页背景" /><div className="profile-shade" /><div className="profile-avatar">镜<span>+</span></div><div className="profile-name"><strong>Scene Fitter</strong><span>场景穿搭创作者</span></div><button type="button">编辑主页</button></div>
+      <div className="profile-stats"><span><strong>12</strong>获赞</span><span><strong>{assets.length}</strong>AIGC 资产</span><span><strong>{saved.length}</strong>收藏视频</span><span><strong>8</strong>关注</span></div>
+      <div className="asset-tabs"><button className={tab === "assets" ? "active" : ""} type="button" onClick={() => setTab("assets")}><Images size={15} />我的穿搭</button><button className={tab === "saved" ? "active" : ""} type="button" onClick={() => setTab("saved")}><Bookmark size={15} />收藏</button></div>
+      {tab === "assets" ? (
+        <div className="asset-gallery">{demoAssets.map((asset) => <button key={asset.id} type="button" onClick={() => onOpenAsset(asset)}><img src={asset.imageUrl} alt={asset.description} /><span><Sparkles size={12} />{asset.createdAt}</span></button>)}</div>
+      ) : savedVideos.length ? (
+        <div className="saved-video-list">{savedVideos.map((video) => <button key={video.id} type="button" onClick={() => onJumpOriginal(video.id)}><img src={video.posterUrl} alt={video.title} /><div><strong>{video.location}</strong><p>{video.title}</p><span><Play size={12} />跳转原视频</span></div></button>)}</div>
+      ) : <div className="empty-state"><Bookmark size={28} /><strong>还没有收藏视频</strong><p>在首页点击收藏，原视频会出现在这里。</p></div>}
+    </section>
+  );
+}
+
+function AssetDetailScreen({ asset, onBack, onPublish, onJumpOriginal, onOpenProduct }: { asset: GeneratedAsset; onBack: () => void; onPublish: () => void; onJumpOriginal: () => void; onOpenProduct: (product: ProductPreset) => void }) {
+  return (
+    <section className="app-screen asset-detail-screen">
+      <header className="floating-screen-header"><button type="button" onClick={onBack} aria-label="返回"><ArrowLeft size={21} /></button><span>AIGC 图片资产</span><button type="button" aria-label="更多"><MoreHorizontal size={21} /></button></header>
+      <img className="asset-detail-image" src={asset.imageUrl} alt={asset.description} />
+      <div className="asset-detail-content">
+        <span className="asset-badge"><Sparkles size={13} />AI 场景穿搭 · {asset.createdAt}</span>
+        <h2>这张照片，已经属于你的场景。</h2>
+        <p>{asset.description}</p>
+        <div className="asset-main-actions"><button type="button" onClick={onPublish}><Sparkles size={17} />一键发布</button><button type="button" onClick={onJumpOriginal}><Music2 size={17} />跳转原视频</button></div>
+        <div className="source-row"><img src={asset.video.posterUrl} alt="原视频" /><div><span>原视频 / 原声</span><strong>{asset.video.location}</strong><small>{asset.video.audio}</small></div><ChevronRight size={18} /></div>
+        <div className="section-heading"><div><span>SHOP THE LOOK</span><strong>同款商品</strong></div><Grid2X2 size={18} /></div>
+        <div className="screen-product-grid compact">{asset.video.products.map((product) => <ProductCard key={product.id} product={product} onOpen={() => onOpenProduct(product)} />)}</div>
+      </div>
+    </section>
+  );
+}
+
+function PublishScreen({ asset, onBack, onJumpOriginal, onOpenProduct }: { asset: GeneratedAsset; onBack: () => void; onJumpOriginal: () => void; onOpenProduct: (product: ProductPreset) => void }) {
+  const [caption, setCaption] = useState(asset.description);
+  const [published, setPublished] = useState(false);
+  return (
+    <section className="app-screen publish-screen">
+      <header className="publish-header"><button type="button" onClick={onBack} aria-label="返回"><ArrowLeft size={21} /></button><div><span>CREATE POST</span><h2>发布场景穿搭</h2></div><button className="publish-submit" type="button" disabled={published} onClick={() => setPublished(true)}>{published ? "已发布" : "发布"}</button></header>
+      <div className="publish-scroll">
+        <div className="publish-preview"><img src={asset.imageUrl} alt="发布图片预览" /><span><Sparkles size={13} />AIGC 图片</span></div>
+        <label className="caption-field"><span>说说这张图</span><textarea value={caption} maxLength={180} onChange={(event) => setCaption(event.target.value)} /><small>{caption.length}/180</small></label>
+        <button className="source-row" type="button" onClick={onJumpOriginal}><img src={asset.video.posterUrl} alt="原视频" /><div><span>使用原视频音乐</span><strong>{asset.video.audio}</strong><small>内容可溯源至 @{asset.video.author}</small></div><ChevronRight size={18} /></button>
+        <div className="publish-options"><button type="button"><User size={17} />谁可以看 <span>公开 <ChevronRight size={15} /></span></button><button type="button"><Images size={17} />保存到相册 <span><CheckCircle2 size={16} /></span></button></div>
+        <div className="section-heading"><div><span>ADD PRODUCTS</span><strong>关联同款商品</strong></div><span>{asset.video.products.length} 件</span></div>
+        <div className="publish-products">{asset.video.products.map((product) => <button key={product.id} type="button" onClick={() => onOpenProduct(product)}><img src={product.imageUrl} style={{ objectPosition: product.imagePosition }} alt={product.name} /><div><strong>{product.name}</strong><span>{product.priceLabel}</span></div><CheckCircle2 size={18} /></button>)}</div>
+        {published && <div className="publish-success"><CheckCircle2 size={22} /><div><strong>发布成功</strong><span>作品已进入你的主页与 AIGC 相册。</span></div></div>}
+      </div>
+    </section>
+  );
+}
+
+function ProductDetail({ product, onClose }: { product: ProductPreset; onClose: () => void }) {
+  const [liked, setLiked] = useState(false);
+  const [added, setAdded] = useState(false);
+  return (
+    <div className="product-detail-layer">
+      <section className="product-detail">
+        <header><button type="button" onClick={onClose} aria-label="返回"><ArrowLeft size={21} /></button><strong>SCENE STORE</strong><div><button type="button" aria-label="收藏" onClick={() => setLiked((value) => !value)}><Star size={20} fill={liked ? "currentColor" : "none"} /></button><button type="button" aria-label="更多"><MoreHorizontal size={21} /></button></div></header>
+        <div className="product-detail-hero"><img src={product.imageUrl} style={{ objectPosition: product.imagePosition }} alt={product.name} /><span>场景同款 · {product.category}</span><button type="button"><Search size={15} />找同款</button></div>
+        <div className="product-detail-body">
+          <div className="product-thumbs">{[0, 1, 2, 3].map((item) => <button className={item === 0 ? "active" : ""} type="button" key={item}><img src={product.imageUrl} style={{ objectPosition: `${40 + item * 7}% ${45 + item * 5}%` }} alt={`${product.name}细节 ${item + 1}`} /></button>)}</div>
+          <div className="product-price"><strong>{product.priceLabel}</strong><span>已售 1000+</span></div>
+          <h2>{product.name}</h2><p>{product.note}。同款单品可以复用到日常、旅行与城市拍摄等不同场景。</p>
+          <div className="product-badges"><span><Truck size={14} />运费险</span><span><Star size={14} />好评率 96.2%</span><span>7 天无理由</span></div>
+          <button className="delivery-row" type="button"><Truck size={18} /><div><strong>部分现货，预计明天发货</strong><span>支持 7 天无理由退货</span></div><ChevronRight size={18} /></button>
+          <div className="product-scene-note"><Sparkles size={18} /><div><strong>来自场景 Look</strong><span>该商品已被 AI 识别，并关联到原视频完整搭配。</span></div></div>
+        </div>
+        <footer><button type="button"><Store size={18} /><span>进店</span></button><button type="button"><MessageCircle size={18} /><span>客服</span></button><button className="cart-button" type="button" onClick={() => setAdded(true)}>{added ? "已加入购物袋" : "加入购物袋"}</button><button className="buy-button" type="button">立即购买</button></footer>
       </section>
     </div>
   );
