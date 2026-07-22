@@ -1303,10 +1303,10 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
               <header className="confirm-section-heading"><strong id="generation-mode-title">选择生成方式</strong></header>
               <div className="generation-mode-selector" role="radiogroup" aria-label="生成方式">
                 <button className={generationMode === "fast" ? "active" : ""} type="button" role="radio" aria-checked={generationMode === "fast"} disabled={generating} onClick={() => setGenerationMode("fast")}>
-                  <i><Zap size={16} /></i><span><strong>快速生成</strong><small>Seedream 直接生成，适合快速预览效果</small></span><b>约 1 分钟</b><div className="mode-meter"><u /><u /><u /></div>
+                  <i><Zap size={16} /></i><span><strong>快速生成</strong><small>适合快速预览穿搭效果</small></span><b>约 1 分钟</b>
                 </button>
                 <button className={generationMode === "refined" ? "active" : ""} type="button" role="radio" aria-checked={generationMode === "refined"} disabled={generating} onClick={() => setGenerationMode("refined")}>
-                  <i><Sparkles size={16} /></i><span><strong>精细生成</strong><small>Sol 分析并调用 image2，适合高质量出图</small></span><b>约 2～3 分钟</b><div className="mode-meter"><u /><u /><u /></div>
+                  <i><Sparkles size={16} /></i><span><strong>精细生成</strong><small>适合生成高质量穿搭图片</small></span><b>约 2～3 分钟</b>
                 </button>
               </div>
             </section>
