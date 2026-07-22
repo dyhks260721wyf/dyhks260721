@@ -108,13 +108,27 @@ async function imageFromSeedreamResponse(response: Response) {
   throw new GenerationFailure("EMPTY_IMAGE_RESULT", upstreamMessage ?? "Seedream 已结束处理，但没有返回生成图片");
 }
 
+const generationQualityBaseline = `UNIVERSAL QUALITY BASELINE — APPLY TO EVERY GENERATION
+- Produce a visually refined, aesthetically coherent fashion photograph with a clear subject, balanced negative space, intentional depth, and a believable camera viewpoint. The result should feel editorial yet natural, not stiff, theatrical, over-posed, or template-like.
+- Keep the person's posture physically plausible: stable center of gravity, relaxed shoulders, natural spinal and pelvic alignment, believable joint angles, and purposeful but unforced placement of the head, arms, hands, hips, legs, and feet.
+- Make the face attractive but recognizable and human: natural expression and gaze, realistic facial proportions, detailed eyes, coherent hairline and hair strands, and skin texture without waxy smoothing or uncanny symmetry.
+- Render hands and feet carefully with correct anatomy, five distinct fingers per visible hand, natural grip and finger spacing, complete shoes, and no fused, missing, duplicated, twisted, or cropped limbs.
+- Make clothing behave like real material: correct layering, closures, seams, thickness, gravity, folds, tension, and contact with the personalized body. Avoid melted fabric, floating accessories, body-clipping garments, or unexplained changes to the Look.
+- Unify the person and environment with one consistent light direction, color temperature, perspective, scale, focus falloff, contact shadow, reflections, and weather response. The person must look photographed inside the scene rather than pasted onto it.
+- Preserve realistic photographic detail and dynamic range. Avoid plastic skin, excessive sharpening, oversaturation, muddy textures, halos, warped architecture, distracting clutter, visual artifacts, or accidental text.
+- Before finalizing, repair any unnatural anatomy, awkward pose, broken clothing physics, implausible lighting, poor crop, or distracting background element. Return only one polished vertical photograph.`;
+
+function withQualityBaseline(taskPrompt: string) {
+  return `${taskPrompt.trim()}\n\n${generationQualityBaseline}`;
+}
+
 function promptFor(input: GenerationInput) {
   if (input.revisionBytes && input.revisionPrompt) {
     const identityReference = input.identityBytes
       ? "Image 3 is the authorized identity reference. Preserve that adult person's recognizable face."
       : "Keep the same recognizable adult identity already present in Image 1.";
 
-    return `GOAL
+    return withQualityBaseline(`GOAL
 Create one new photorealistic vertical fashion photograph by revising the current generated Look.
 
 REFERENCE ROLES
@@ -135,14 +149,14 @@ REVISION RULES
 - No text, logos, watermarks, duplicate people, extra limbs, or unintended garments.
 
 CONTEXT
-Original location: ${input.location}. Styling direction: ${input.outfitStyle}. Original content: ${input.contentSummary}.`;
+Original location: ${input.location}. Styling direction: ${input.outfitStyle}. Original content: ${input.contentSummary}.`);
   }
 
   const identityInstruction = input.identityBytes
     ? "Image 2 is an authorized identity reference. Preserve that adult person's recognizable facial identity while replacing the model in Image 1."
     : "No separate identity image was supplied. Preserve the adult person visible in Image 1 while re-rendering the photograph.";
 
-  return `GOAL
+  return withQualityBaseline(`GOAL
 Create one personalized, photorealistic vertical fashion photograph from the supplied reference images.
 
 REFERENCE ROLES
@@ -165,7 +179,7 @@ PRESERVE AND FINISH
 - Preserve the complete outfit and recognizable scene from Image 1, but allow subject placement and framing to change for the new pose.
 - Styling direction: ${input.outfitStyle}. Context: ${input.contentSummary}. Location: ${input.location}.
 - Show exactly one adult with natural anatomy and a coherent shadow/contact with the ground.
-- No text, logos, watermarks, duplicate people, extra limbs, invented garments or unrelated accessories.`;
+- No text, logos, watermarks, duplicate people, extra limbs, invented garments or unrelated accessories.`);
 }
 
 async function runGeneration(job: GenerationJob, input: GenerationInput) {
