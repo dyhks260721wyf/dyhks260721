@@ -3,6 +3,9 @@ import type { ProductPreset } from "@/lib/content";
 import { updateUserContentProducts } from "@/lib/user-content";
 
 export type GenerationJobStatus = "queued" | "processing" | "completed" | "failed";
+export type GenerationMode = "fast" | "refined";
+
+const gatewayUserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36";
 
 export type GenerationJob = {
   id: string;
@@ -13,7 +16,8 @@ export type GenerationJob = {
   createdAt: string;
   updatedAt: string;
   expiresAt: string;
-  resultMode?: "seedream-generation" | "local-fallback";
+  generationMode: GenerationMode;
+  resultMode?: "seedream-generation" | "sol-image-generation" | "local-fallback";
   error?: { code: string; message: string; upstreamStatus?: number };
   productStatus: "not_required" | "queued" | "analyzing" | "completed" | "failed";
   productMessage?: string;
@@ -42,6 +46,7 @@ type GenerationInput = {
   analyzeProducts: boolean;
   productImageUrl: string;
   productOwnerId: string | null;
+  generationMode: GenerationMode;
 };
 
 class GenerationFailure extends Error {
@@ -108,6 +113,60 @@ function decodeImageResult(base64: string) {
   const isWebp = bytes.subarray(0, 4).toString("ascii") === "RIFF" && bytes.subarray(8, 12).toString("ascii") === "WEBP";
   if (bytes.length < 1_000 || (!isJpeg && !isPng && !isWebp)) throw new GenerationFailure("INVALID_IMAGE_RESULT", "生图服务没有返回有效图片");
   return bytes;
+}
+
+function imageResultFromSolEvent(event: unknown) {
+  if (!event || typeof event !== "object") return null;
+  const value = event as {
+    item?: { type?: string; result?: unknown };
+    response?: { output?: Array<{ type?: string; result?: unknown }> };
+  };
+  if (value.item?.type === "image_generation_call" && typeof value.item.result === "string") return value.item.result;
+  const imageOutput = value.response?.output?.find((item) => item.type === "image_generation_call" && typeof item.result === "string");
+  return typeof imageOutput?.result === "string" ? imageOutput.result : null;
+}
+
+async function consumeSolStream(response: Response, job: GenerationJob) {
+  if (!response.body) throw new GenerationFailure("EMPTY_UPSTREAM_STREAM", "精细生成服务没有返回数据", response.status);
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let pending = "";
+  let finalResult: string | null = null;
+  let currentStage = job.stage;
+
+  const processLine = async (line: string) => {
+    if (!line.startsWith("data: ") || line === "data: [DONE]") return;
+    let event: { type?: string; error?: { message?: string } };
+    try {
+      event = JSON.parse(line.slice(6)) as typeof event;
+    } catch {
+      return;
+    }
+    const result = imageResultFromSolEvent(event);
+    if (result) finalResult = result;
+
+    if (event.type === "response.image_generation_call.in_progress" && currentStage !== "generating") {
+      currentStage = "generating";
+      await updateJob(job, { stage: "generating", message: "Sol 已调用 image2，正在精细生成画面" });
+    } else if (event.type === "response.image_generation_call.partial_image" && currentStage !== "rendering") {
+      currentStage = "rendering";
+      await updateJob(job, { stage: "rendering", message: "image2 已生成画面，正在完成细节渲染" });
+    } else if (event.type === "response.failed" || event.type === "error") {
+      throw new GenerationFailure("SOL_GENERATION_FAILED", event.error?.message ?? "精细生成服务返回失败");
+    }
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    pending += decoder.decode(value, { stream: !done });
+    const lines = pending.split("\n");
+    pending = lines.pop() ?? "";
+    for (const line of lines) await processLine(line.trimEnd());
+    if (done) break;
+  }
+  if (pending) await processLine(pending.trimEnd());
+  if (!finalResult) throw new GenerationFailure("EMPTY_IMAGE_RESULT", "Sol 已结束处理，但没有返回生成图片");
+  return decodeImageResult(finalResult);
 }
 
 async function imageFromSeedreamResponse(response: Response) {
@@ -203,7 +262,100 @@ PRESERVE AND FINISH
 - No text, logos, watermarks, duplicate people, extra limbs, invented garments or unrelated accessories.`);
 }
 
+function solPromptFor(input: GenerationInput) {
+  return `You are the sole vision reasoning and image-generation orchestrator for an authorized AI fashion try-on.
+Analyze every supplied reference image and all requirements yourself. Then invoke the built-in image_generation tool backed specifically by image2 / gpt-image-2. Do not merely write or return a prompt, do not ask the caller to invoke another image API, and do not finish with a text-only answer. Wait for the image tool and return exactly one final generated image.
+
+Use the image tool at high quality. Before invoking it, reconcile identity, personalized body proportions, outfit inventory, pose, environment, perspective and lighting into one coherent generation instruction. After generation, inspect the result conceptually against the constraints and prioritize natural anatomy, realistic garment physics and a polished photographic finish.
+
+GENERATION TASK
+${promptFor(input)}`;
+}
+
+async function runSolGeneration(job: GenerationJob, input: GenerationInput) {
+  try {
+    const apiKey = process.env.SOL_API_KEY;
+    if (!apiKey) throw new GenerationFailure("SOL_NOT_CONFIGURED", "精细生成服务尚未配置");
+
+    await updateJob(job, {
+      status: "processing",
+      stage: "analyzing",
+      message: input.revisionBytes ? "Sol 正在理解你的修改要求" : "Sol 正在精细分析场景、形象与身体数据",
+    });
+    const content: Array<Record<string, unknown>> = [{ type: "input_text", text: solPromptFor(input) }];
+    if (input.revisionBytes && input.revisionType) {
+      content.push({ type: "input_image", image_url: imageDataUrl(input.revisionBytes, input.revisionType), detail: "high" });
+    }
+    content.push({ type: "input_image", image_url: imageDataUrl(input.sceneBytes, "image/jpeg"), detail: "high" });
+    if (input.identityBytes && input.identityType) {
+      content.push({ type: "input_image", image_url: imageDataUrl(input.identityBytes, input.identityType), detail: "high" });
+    }
+
+    const baseUrl = (process.env.SOL_API_BASE_URL ?? "https://api.8989886.xyz/v1").replace(/\/$/, "");
+    const response = await fetch(`${baseUrl}/responses`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "User-Agent": gatewayUserAgent,
+      },
+      body: JSON.stringify({
+        model: process.env.SOL_ORCHESTRATOR_MODEL ?? "gpt-5.6-sol",
+        input: [{ role: "user", content }],
+        tools: [{
+          type: "image_generation",
+          quality: "high",
+          size: "1024x1536",
+          output_format: "jpeg",
+          output_compression: 92,
+        }],
+        stream: true,
+      }),
+    });
+
+    if (!response.ok) {
+      const detail = (await response.text()).slice(0, 500);
+      console.error("Sol upstream request failed", { requestId: input.requestId, status: response.status, detail });
+      const authenticationFailed = response.status === 401 || response.status === 403;
+      const message = authenticationFailed
+        ? "精细生成服务鉴权失败，请联系管理员检查配置"
+        : response.status === 429 ? "精细生成请求较多，请稍后重试" : `精细生成服务返回错误（${response.status}）`;
+      throw new GenerationFailure(authenticationFailed ? "SOL_AUTH_FAILED" : response.status === 429 ? "RATE_LIMITED" : "SOL_UPSTREAM_ERROR", message, response.status);
+    }
+
+    const result = await consumeSolStream(response, job);
+    await writeFile(resultFile(job.id), result, { mode: 0o600 });
+    await updateJob(job, {
+      status: "completed",
+      stage: "completed",
+      message: input.revisionBytes ? "精细修改版本已生成" : "精细场景 Look 已生成",
+      resultMode: "sol-image-generation",
+    });
+  } catch (error) {
+    const failure = error instanceof GenerationFailure
+      ? error
+      : new GenerationFailure("SOL_GENERATION_FAILED", "精细生成连接意外中断，请重试");
+    console.error("Sol generation job failed", {
+      requestId: input.requestId,
+      jobId: job.id,
+      code: failure.code,
+      upstreamStatus: failure.upstreamStatus,
+      error: error instanceof Error ? error.message : "UNKNOWN",
+    });
+    await updateJob(job, {
+      status: "failed",
+      stage: "failed",
+      message: failure.publicMessage,
+      error: { code: failure.code, message: failure.publicMessage, upstreamStatus: failure.upstreamStatus },
+    });
+  }
+}
+
 async function runGeneration(job: GenerationJob, input: GenerationInput) {
+  if (input.generationMode === "refined") {
+    await runSolGeneration(job, input);
+    return;
+  }
   try {
     if (!process.env.IMAGE_API_KEY) {
       await writeFile(resultFile(job.id), input.sceneBytes, { mode: 0o600 });
@@ -412,6 +564,7 @@ export async function createGenerationJob(input: GenerationInput) {
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
     expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1_000).toISOString(),
+    generationMode: input.generationMode,
     productStatus: input.analyzeProducts ? "queued" : "not_required",
     productMessage: input.analyzeProducts ? "等待识别暂停画面中的穿搭单品" : undefined,
     products: [],

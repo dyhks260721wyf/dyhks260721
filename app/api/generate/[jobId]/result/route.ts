@@ -24,7 +24,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ job
         "Cache-Control": "private, no-store",
         "X-Request-Id": job.requestId,
         "X-Demo-Mode": job.resultMode ?? "seedream-generation",
-        "X-Image-Model": process.env.IMAGE_API_MODEL ?? "doubao-seedream-5.0-lite",
+        "X-Image-Model": job.resultMode === "sol-image-generation"
+          ? process.env.SOL_ORCHESTRATOR_MODEL ?? "gpt-5.6-sol"
+          : process.env.IMAGE_API_MODEL ?? "doubao-seedream-5.0-lite",
       },
     });
   } catch {

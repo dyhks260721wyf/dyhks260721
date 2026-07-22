@@ -39,6 +39,7 @@ import {
   Volume2,
   WandSparkles,
   X,
+  Zap,
 } from "lucide-react";
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import type { ProductPreset, VideoPreset } from "@/lib/content";
@@ -48,6 +49,7 @@ type EntrySource = "pause_tag" | "comment_tab" | "ai_analysis";
 type CommentTab = "comments" | "analysis" | "tryon";
 type AppScreen = "feed" | "friends" | "messages" | "assets" | "publish";
 type PoseStyle = "candid" | "walking" | "glance" | "editorial";
+type GenerationMode = "fast" | "refined";
 
 type UserTryOnProfile = {
   outfitStyle: string;
@@ -78,6 +80,7 @@ type LookVersion = {
   saved: boolean;
   products: ProductPreset[];
   productStatus: "not_required" | "completed" | "failed";
+  generationMode: GenerationMode;
 };
 
 type GenerationJobPayload = {
@@ -93,6 +96,7 @@ type GenerationJobPayload = {
   productMessage?: string;
   products?: ProductPreset[];
   productError?: { message?: string };
+  generationMode?: GenerationMode;
 };
 
 const profileStorageKey = "scene-fit:user-profile:v1";
@@ -674,6 +678,7 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
   const [bodyType, setBodyType] = useState(initialProfile?.bodyType ?? "hourglass");
   const [poseStyle, setPoseStyle] = useState<PoseStyle>(initialProfile?.poseStyle ?? "candid");
   const [consent, setConsent] = useState(initialProfile?.consentAccepted ?? false);
+  const [generationMode, setGenerationMode] = useState<GenerationMode>("fast");
   const [generating, setGenerating] = useState(false);
   const [generationStage, setGenerationStage] = useState(0);
   const [generationStatusMessage, setGenerationStatusMessage] = useState<string | null>(null);
@@ -689,7 +694,9 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
   const revisionInputRef = useRef<HTMLTextAreaElement>(null);
   const versionRailRef = useRef<HTMLDivElement>(null);
   const faceDirections = ["正视镜头", "缓慢向左转", "缓慢向右转", "轻轻抬头", "轻轻低头"];
-  const generationMessages = ["正在提交场景与授权人像", "正在整理场景、形象与身体数据", "Seedream 5.0 Lite 正在生成画面", "正在完成最终渲染"];
+  const generationMessages = generationMode === "refined"
+    ? ["正在提交精细生成任务", "Sol 正在分析场景、形象与身体数据", "Sol 已调用 image2 生成画面", "正在完成高质量细节渲染"]
+    : ["正在提交快速生成任务", "正在整理场景、形象与身体数据", "Seedream 5.0 Lite 正在生成画面", "正在完成最终渲染"];
   const activeVersion = resultVersions.find((version) => version.id === activeVersionId) ?? resultVersions.at(-1) ?? null;
   const activeProducts = activeVersion?.products.length ? activeVersion.products : video.products;
   const sceneReferenceUrl = sceneFrameDataUrl ?? video.posterUrl;
@@ -787,6 +794,7 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
     form.set("outfitStyle", outfitStyle);
     form.set("consentAccepted", "true");
     form.set("entrySource", entrySource);
+    form.set("generationMode", generationMode);
     if (sceneFrameDataUrl) form.set("sceneFrame", await dataUrlToFile(sceneFrameDataUrl, `${video.id}-paused-frame.jpg`));
     if (identityDataUrl && !useDemoIdentity) form.set("identityBoard", await dataUrlToFile(identityDataUrl, "identity-board.jpg"));
     if (options) {
@@ -838,6 +846,7 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
           saved: false,
           products: job.products?.length ? job.products : video.products,
           productStatus: job.productStatus === "failed" ? "failed" : job.productStatus === "completed" ? "completed" : "not_required",
+          generationMode: job.generationMode ?? generationMode,
         } satisfies LookVersion;
       }
       await waitForPoll();
@@ -1039,18 +1048,29 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
             </div>
             {initialProfile && <div className="profile-reuse-note"><CheckCircle2 size={18} /><div><strong>已使用你上次保存的形象</strong><span>以后从三个入口进入，都可以直接生成</span></div><button type="button" onClick={() => setStep(0)}>修改</button></div>}
             <div className="profile-summary"><span>{outfitStyle === "womenswear" ? "女士穿搭" : "男士穿搭"}</span><span>{bodyType === "hourglass" ? "沙漏型" : bodyType === "triangle" ? "倒三角" : bodyType === "pear" ? "梨型" : "直筒型"}</span><span>{heightCm} cm</span><span>{weightRange.replace("_", "–")} kg</span><span>{poseOptions.find((item) => item.value === poseStyle)?.label}</span></div>
+            <section className="generation-mode-section" aria-labelledby="generation-mode-title">
+              <header><div><span>RENDER MODE</span><strong id="generation-mode-title">选择生成方式</strong></div><small>生成中可以收起继续刷</small></header>
+              <div className="generation-mode-selector" role="radiogroup" aria-label="生成方式">
+                <button className={generationMode === "fast" ? "active" : ""} type="button" role="radio" aria-checked={generationMode === "fast"} disabled={generating} onClick={() => setGenerationMode("fast")}>
+                  <i><Zap size={16} /></i><span><em>FAST / 01</em><strong>快速生成</strong><small>Seedream 直接生成</small></span><b>约 1 分钟</b><div className="mode-meter"><u /><u /><u /></div>
+                </button>
+                <button className={generationMode === "refined" ? "active" : ""} type="button" role="radio" aria-checked={generationMode === "refined"} disabled={generating} onClick={() => setGenerationMode("refined")}>
+                  <i><Sparkles size={16} /></i><span><em>FINE / 03</em><strong>精细生成</strong><small>Sol 分析并调用 image2</small></span><b>约 2～3 分钟</b><div className="mode-meter"><u /><u /><u /></div>
+                </button>
+              </div>
+            </section>
             <label className="consent-row"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><i>{consent && <Check size={14} />}</i><span>我确认使用本人或已获授权的人像，并同意将图片发送至图像生成服务处理。</span></label>
             {error && <p className="form-error">{error}</p>}
-            <button className="flow-primary generate-button" disabled={generating} type="submit">{generating ? <><span className="spinner" />正在融合场景与 Look</> : <><WandSparkles size={18} />生成我的场景 Look</>}</button>
+            <button className={`flow-primary generate-button mode-${generationMode}`} disabled={generating} type="submit">{generating ? <><span className="spinner" />正在融合场景与 Look</> : <>{generationMode === "fast" ? <Zap size={18} /> : <WandSparkles size={18} />}{generationMode === "fast" ? "快速生成场景 Look" : "精细生成场景 Look"}</>}</button>
             {generating && <div className="generation-progress" role="status" aria-live="polite"><div><Sparkles size={18} /><span><strong>{generationStatusMessage ?? generationMessages[generationStage]}</strong><small>生图耗时可能较长；未返回明确错误时会持续等待</small></span></div><div className="generation-track"><i style={{ width: `${(generationStage + 1) / generationMessages.length * 100}%` }} /></div><button className="minimize-generation" type="button" onClick={minimizeGeneration}><Minimize2 size={15} />收起，继续刷视频</button></div>}
-            <small className="generation-note">场景图、授权人像与身材数据将直接交给 Seedream 5.0 Lite 生成。</small>
+            <small className="generation-note">{generationMode === "fast" ? "Seedream 直接生成，适合快速预览穿搭效果。" : "Sol 会精细分析全部要求，并在任务内调用 image2 生成。"}</small>
           </form>
         )}
 
         {step === 3 && activeVersion && (
           <div className="result-step">
             <GeneratedImageStage className="result-image-stage" src={activeVersion.imageUrl} alt={`生成的场景穿搭结果，第 ${resultVersions.findIndex((version) => version.id === activeVersion.id) + 1} 个版本`}>
-              <div className="result-topline"><span><Sparkles size={14} /> {activeVersion.resultMode === "seedream-generation" ? "Seedream · AI 场景试穿" : "本地演示结果"}</span><small>{resultVersions.findIndex((version) => version.id === activeVersion.id) + 1} / {resultVersions.length}</small></div>
+              <div className="result-topline"><span><Sparkles size={14} /> {activeVersion.resultMode === "sol-image-generation" ? "Sol + image2 · 精细生成" : activeVersion.resultMode === "seedream-generation" ? "Seedream · 快速生成" : "本地演示结果"}</span><small>{resultVersions.findIndex((version) => version.id === activeVersion.id) + 1} / {resultVersions.length}</small></div>
               {generating && <div className="revision-image-progress" role="status"><span className="spinner" /><strong>{generationStatusMessage ?? generationMessages[generationStage]}</strong><small>正在保留当前版本，并生成一张新照片</small><button className="revision-minimize" type="button" onClick={minimizeGeneration}><Minimize2 size={15} />收起，继续浏览</button></div>}
             </GeneratedImageStage>
             <div className="result-panel">

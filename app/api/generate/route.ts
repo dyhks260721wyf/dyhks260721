@@ -95,6 +95,7 @@ export async function POST(request: Request) {
     const identity = form.get("identityBoard");
     const revision = form.get("revisionImage");
     const revisionPrompt = String(form.get("revisionPrompt") ?? "").trim();
+    const generationMode = String(form.get("generationMode") ?? "fast");
 
     if (!video || !video.eligible) {
       return Response.json({ code: "VIDEO_NOT_ELIGIBLE", message: "当前内容暂不支持 AI 上身", requestId }, { status: 400 });
@@ -110,6 +111,9 @@ export async function POST(request: Request) {
     }
     if (revisionPrompt.length > 300) {
       return Response.json({ code: "REVISION_TOO_LONG", message: "修改要求请控制在 300 字以内", requestId }, { status: 400 });
+    }
+    if (generationMode !== "fast" && generationMode !== "refined") {
+      return Response.json({ code: "INVALID_GENERATION_MODE", message: "请选择快速生成或精细生成", requestId }, { status: 400 });
     }
 
     let sceneBytes: Buffer;
@@ -163,6 +167,7 @@ export async function POST(request: Request) {
       analyzeProducts: Boolean(video.userUploaded),
       productImageUrl: video.posterUrl,
       productOwnerId: video.userUploaded ? video.id : null,
+      generationMode,
     });
 
     return Response.json(

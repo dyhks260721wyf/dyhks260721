@@ -14,6 +14,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ job
       status: job.status,
       stage: job.stage,
       message: job.message,
+      generationMode: job.generationMode,
       resultMode: job.resultMode,
       resultUrl: job.status === "completed" ? `/api/generate/${job.id}/result` : undefined,
       error: job.error,
