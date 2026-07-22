@@ -909,7 +909,7 @@ function CommentsSheet({ video, tab, onTabChange, onClose, onTryOn }: { video: V
             <div className="analysis-heading"><span><Sparkles size={16} /> AI 内容摘要</span><small>内容由 AI 辅助生成，请结合实际判断</small></div>
             <p className="analysis-summary">{video.analysis.summary}</p>
             <div className="analysis-tags">{video.analysis.tags.map((tag) => <span key={tag}>#{tag}</span>)}</div>
-            <button className="analysis-try-on" type="button" onClick={() => onTryOn("ai_analysis")}><span><WandSparkles size={20} />试试这套</span><small>用我的形象预览原场景与完整 Look</small></button>
+            <button className="analysis-try-on" type="button" onClick={() => onTryOn("ai_analysis")}><WandSparkles size={16} />试试这套</button>
             <div className="question-list">
               <span>你可能想问</span>
               {video.analysis.questions.map((item) => (
