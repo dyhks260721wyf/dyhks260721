@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { createGenerationJob } from "@/lib/ai-generation";
 import { findVideo } from "@/lib/content";
+import { readUserContent, userContentFile } from "@/lib/user-content";
 
 export const runtime = "nodejs";
 
@@ -82,7 +83,8 @@ export async function POST(request: Request) {
   try {
     const form = await request.formData();
     const videoId = String(form.get("videoId") ?? "");
-    const video = findVideo(videoId);
+    const uploadedRecord = videoId.startsWith("user-") ? await readUserContent(videoId) : null;
+    const video = findVideo(videoId) ?? uploadedRecord?.video;
     const heightCm = Number(form.get("heightCm") ?? 168);
     const weightRange = String(form.get("weightRange") ?? "50_60");
     const bodyType = String(form.get("bodyType") ?? "hourglass");
@@ -117,7 +119,9 @@ export async function POST(request: Request) {
       }
       sceneBytes = Buffer.from(await sceneFrame.arrayBuffer());
     } else {
-      sceneBytes = await readFile(publicFile(video.posterUrl));
+      sceneBytes = uploadedRecord
+        ? await readFile(userContentFile(uploadedRecord, "poster"))
+        : await readFile(publicFile(video.posterUrl));
     }
     let identityBytes: Buffer | null = null;
     let identityType: string | null = null;
@@ -156,6 +160,9 @@ export async function POST(request: Request) {
       weightLabel: weightLabels[weightRange],
       poseStyle: poseProfiles[poseStyle].label,
       poseInstruction: poseProfiles[poseStyle].instruction,
+      analyzeProducts: Boolean(video.userUploaded),
+      productImageUrl: video.posterUrl,
+      productOwnerId: video.userUploaded ? video.id : null,
     });
 
     return Response.json(

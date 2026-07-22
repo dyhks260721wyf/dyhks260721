@@ -27,6 +27,9 @@ export type VideoPreset = {
   audio: string;
   videoUrl: string;
   posterUrl: string;
+  mediaType?: "video" | "image";
+  userUploaded?: boolean;
+  uploadedAt?: string;
   counts: { likes: string; comments: string; saves: string };
   eligible: boolean;
   accent: string;

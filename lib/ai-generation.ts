@@ -1,4 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import type { ProductPreset } from "@/lib/content";
+import { updateUserContentProducts } from "@/lib/user-content";
 
 export type GenerationJobStatus = "queued" | "processing" | "completed" | "failed";
 
@@ -13,6 +15,10 @@ export type GenerationJob = {
   expiresAt: string;
   resultMode?: "seedream-generation" | "local-fallback";
   error?: { code: string; message: string; upstreamStatus?: number };
+  productStatus: "not_required" | "queued" | "analyzing" | "completed" | "failed";
+  productMessage?: string;
+  products: ProductPreset[];
+  productError?: { code: string; message: string; upstreamStatus?: number };
 };
 
 type GenerationInput = {
@@ -33,6 +39,9 @@ type GenerationInput = {
   weightLabel: string;
   poseStyle: string;
   poseInstruction: string;
+  analyzeProducts: boolean;
+  productImageUrl: string;
+  productOwnerId: string | null;
 };
 
 class GenerationFailure extends Error {
@@ -65,9 +74,21 @@ export function resultFile(jobId: string) {
 async function writeJob(job: GenerationJob) {
   const target = statusFile(job.id);
   const temporary = `${target}.${crypto.randomUUID()}.tmp`;
-  await writeFile(temporary, JSON.stringify(job), { mode: 0o600 });
-  await rename(temporary, target);
+  const payload = JSON.stringify(job);
+  const previous = jobWriteQueues.get(job.id) ?? Promise.resolve();
+  const current = previous.then(async () => {
+    await writeFile(temporary, payload, { mode: 0o600 });
+    await rename(temporary, target);
+  });
+  jobWriteQueues.set(job.id, current);
+  try {
+    await current;
+  } finally {
+    if (jobWriteQueues.get(job.id) === current) jobWriteQueues.delete(job.id);
+  }
 }
+
+const jobWriteQueues = new Map<string, Promise<void>>();
 
 async function updateJob(job: GenerationJob, patch: Partial<GenerationJob>) {
   Object.assign(job, patch, { updatedAt: new Date().toISOString() });
@@ -268,6 +289,118 @@ async function runGeneration(job: GenerationJob, input: GenerationInput) {
   }
 }
 
+type LunaProduct = { name?: unknown; category?: unknown; priceLabel?: unknown; note?: unknown; focusX?: unknown; focusY?: unknown };
+
+function cleanProductText(value: unknown, fallback: string, maxLength: number) {
+  return (typeof value === "string" ? value.trim() : "").slice(0, maxLength) || fallback;
+}
+
+function productFocus(value: unknown, fallback: number) {
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.min(100, Math.round(number))) : fallback;
+}
+
+function parseLunaProducts(content: string, imageUrl: string) {
+  const normalized = content.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  const start = normalized.indexOf("{");
+  const end = normalized.lastIndexOf("}");
+  if (start < 0 || end <= start) throw new Error("LUNA_INVALID_JSON");
+  const payload = JSON.parse(normalized.slice(start, end + 1)) as { items?: unknown };
+  if (!Array.isArray(payload.items)) throw new Error("LUNA_ITEMS_MISSING");
+
+  return payload.items.slice(0, 6).flatMap((raw, index) => {
+    if (!raw || typeof raw !== "object") return [];
+    const item = raw as LunaProduct;
+    const category = cleanProductText(item.category, "穿搭单品", 20);
+    return [{
+      id: `luna-${index + 1}`,
+      name: cleanProductText(item.name, `${category}相似款`, 42),
+      category,
+      priceLabel: cleanProductText(item.priceLabel, "¥199 起", 18),
+      imageUrl,
+      imagePosition: `${productFocus(item.focusX, 50)}% ${productFocus(item.focusY, 50)}%`,
+      note: cleanProductText(item.note, "根据暂停画面识别的同风格商品", 72),
+    } satisfies ProductPreset];
+  });
+}
+
+async function runProductAnalysis(job: GenerationJob, input: GenerationInput) {
+  try {
+    const baseUrl = (process.env.LUNA_API_BASE_URL ?? "https://api.8989886.xyz/v1").replace(/\/$/, "");
+    const apiKey = process.env.LUNA_API_KEY;
+    if (!apiKey) throw new GenerationFailure("LUNA_NOT_CONFIGURED", "穿搭商品识别服务尚未配置");
+
+    await updateJob(job, {
+      productStatus: "analyzing",
+      productMessage: "Luna 正在识别暂停画面中的穿搭单品",
+    });
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: process.env.LUNA_API_MODEL ?? "gpt-5.6-luna",
+        temperature: 0.2,
+        messages: [
+          {
+            role: "system",
+            content: "你是短视频穿搭商品分析师。只分析画面中清晰可见的服装、鞋、包、帽子和配饰，不推断人物身份或敏感属性。输出严格 JSON，不要 Markdown。商品是同风格示例，不得声称识别出确切品牌。",
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "识别这张暂停关键帧里的完整穿搭，按视觉重要性返回 1 到 6 件可购买单品。focusX、focusY 是该单品在图片中的中心点百分比（0 到 100），用于裁切商品缩略图。输出格式：{\"items\":[{\"name\":\"具体但不虚构品牌的商品名\",\"category\":\"品类\",\"priceLabel\":\"合理人民币示例价格，如 ¥299 起\",\"note\":\"颜色、材质、版型及与场景的搭配理由\",\"focusX\":50,\"focusY\":60}]}。没有清晰服装时 items 返回空数组。",
+              },
+              { type: "image_url", image_url: { url: imageDataUrl(input.sceneBytes, "image/jpeg") } },
+            ],
+          },
+        ],
+      }),
+    });
+    const payload = await response.json().catch(() => null) as {
+      choices?: Array<{ message?: { content?: unknown } }>;
+      error?: { message?: unknown };
+    } | null;
+    if (!response.ok) {
+      const publicMessage = response.status === 401 || response.status === 403
+        ? "穿搭商品识别服务鉴权失败"
+        : response.status === 429 ? "穿搭识别请求较多，暂未返回商品" : `穿搭商品识别返回错误（${response.status}）`;
+      console.error("Luna product analysis failed", { requestId: input.requestId, status: response.status, detail: payload?.error?.message });
+      throw new GenerationFailure("LUNA_UPSTREAM_ERROR", publicMessage, response.status);
+    }
+    const rawContent = payload?.choices?.[0]?.message?.content;
+    const content = typeof rawContent === "string"
+      ? rawContent
+      : Array.isArray(rawContent)
+        ? rawContent.flatMap((item) => item && typeof item === "object" && "text" in item && typeof item.text === "string" ? [item.text] : []).join("")
+        : "";
+    const products = parseLunaProducts(content, input.productImageUrl);
+    if (input.productOwnerId) await updateUserContentProducts(input.productOwnerId, products);
+    await updateJob(job, {
+      productStatus: "completed",
+      productMessage: products.length ? `Luna 已整理 ${products.length} 件相似商品` : "Luna 未在关键帧中识别到清晰单品",
+      products,
+    });
+  } catch (error) {
+    const failure = error instanceof GenerationFailure
+      ? error
+      : new GenerationFailure("LUNA_ANALYSIS_FAILED", "穿搭商品识别没有完成");
+    console.error("Luna product analysis ended without products", {
+      requestId: input.requestId,
+      jobId: job.id,
+      code: failure.code,
+      error: error instanceof Error ? error.message : "UNKNOWN",
+    });
+    await updateJob(job, {
+      productStatus: "failed",
+      productMessage: failure.publicMessage,
+      products: [],
+      productError: { code: failure.code, message: failure.publicMessage, upstreamStatus: failure.upstreamStatus },
+    });
+  }
+}
+
 export async function createGenerationJob(input: GenerationInput) {
   const now = new Date();
   const job: GenerationJob = {
@@ -279,10 +412,14 @@ export async function createGenerationJob(input: GenerationInput) {
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
     expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1_000).toISOString(),
+    productStatus: input.analyzeProducts ? "queued" : "not_required",
+    productMessage: input.analyzeProducts ? "等待识别暂停画面中的穿搭单品" : undefined,
+    products: [],
   };
   await mkdir(jobDirectory(job.id), { recursive: true, mode: 0o700 });
   await writeJob(job);
   void runGeneration(job, input);
+  if (input.analyzeProducts) void runProductAnalysis(job, input);
   return job;
 }
 

@@ -76,6 +76,8 @@ type LookVersion = {
   createdAt: string;
   resultMode: string | null;
   saved: boolean;
+  products: ProductPreset[];
+  productStatus: "not_required" | "completed" | "failed";
 };
 
 type GenerationJobPayload = {
@@ -87,6 +89,10 @@ type GenerationJobPayload = {
   resultUrl?: string;
   resultMode?: string;
   error?: { message?: string };
+  productStatus?: "not_required" | "queued" | "analyzing" | "completed" | "failed";
+  productMessage?: string;
+  products?: ProductPreset[];
+  productError?: { message?: string };
 };
 
 const profileStorageKey = "scene-fit:user-profile:v1";
@@ -99,6 +105,7 @@ const poseOptions: Array<{ value: PoseStyle; label: string; hint: string }> = [
 ];
 
 export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) {
+  const [feedVideos, setFeedVideos] = useState(initialVideos);
   const [activeIndex, setActiveIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const [openSheet, setOpenSheet] = useState<OpenSheet>(null);
@@ -115,8 +122,8 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
   const [selectedProduct, setSelectedProduct] = useState<ProductPreset | null>(null);
   const feedRef = useRef<HTMLDivElement>(null);
 
-  const activeVideo = initialVideos[activeIndex] ?? initialVideos[0];
-  const tryOnVideo = initialVideos.find((video) => video.id === tryOn.videoId) ?? activeVideo;
+  const activeVideo = feedVideos[Math.min(activeIndex, Math.max(feedVideos.length - 1, 0))] ?? initialVideos[0];
+  const tryOnVideo = feedVideos.find((video) => video.id === tryOn.videoId) ?? activeVideo;
   const publishAsset = activeAsset ?? assets[0] ?? {
     id: `demo-${activeVideo.id}`,
     imageUrl: activeVideo.posterUrl,
@@ -134,7 +141,7 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
       if (rawAssets) {
         const persisted = JSON.parse(rawAssets) as Array<Omit<GeneratedAsset, "video"> & { videoId: string }>;
         setAssets(persisted.flatMap((asset) => {
-          const video = initialVideos.find((item) => item.id === asset.videoId);
+          const video = feedVideos.find((item) => item.id === asset.videoId);
           return video ? [{ ...asset, video }] : [];
         }));
       }
@@ -144,7 +151,7 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
     } finally {
       setStorageReady(true);
     }
-  }, [initialVideos]);
+  }, [feedVideos]);
 
   useEffect(() => {
     if (!storageReady) return;
@@ -175,7 +182,7 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
     const feed = feedRef.current;
     if (!feed) return;
     const next = Math.round(feed.scrollTop / Math.max(feed.clientHeight, 1));
-    if (next !== activeIndex && next >= 0 && next < initialVideos.length) setActiveIndex(next);
+    if (next !== activeIndex && next >= 0 && next <= feedVideos.length) setActiveIndex(next);
   }
 
   function rememberPausedFrame(dataUrl: string | null) {
@@ -213,8 +220,16 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
     setActiveAsset(asset);
   }
 
+  function appendUploadedVideo(video: VideoPreset) {
+    if (feedVideos.some((item) => item.id === video.id)) return;
+    const nextIndex = feedVideos.length;
+    setFeedVideos((current) => [...current, video]);
+    setActiveIndex(nextIndex);
+    requestAnimationFrame(() => feedRef.current?.scrollTo({ top: nextIndex * feedRef.current.clientHeight, behavior: "auto" }));
+  }
+
   function jumpToOriginal(videoId: string) {
-    const index = initialVideos.findIndex((video) => video.id === videoId);
+    const index = feedVideos.findIndex((video) => video.id === videoId);
     if (index >= 0) {
       setActiveIndex(index);
       setScreen("feed");
@@ -249,12 +264,12 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
         </div>}
 
         <div className="video-feed" ref={feedRef} onScroll={handleFeedScroll}>
-          {initialVideos.map((video, index) => (
+          {feedVideos.map((video, index) => (
             <FeedSlide
               key={video.id}
               video={video}
               active={index === activeIndex}
-              paused={index === activeIndex && paused}
+              paused={index === activeIndex && (video.mediaType === "image" || paused)}
               saved={saved.includes(video.id)}
               onPause={(frameDataUrl) => { if (index !== activeIndex) return; rememberPausedFrame(frameDataUrl); setPaused(true); }}
               onResume={() => index === activeIndex && setPaused(false)}
@@ -263,15 +278,20 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
               onSave={() => toggleSaved(video.id)}
             />
           ))}
+          <UploadSlide
+            active={activeIndex === feedVideos.length}
+            uploadCount={feedVideos.filter((video) => video.userUploaded).length}
+            onUploaded={appendUploadedVideo}
+          />
         </div>
 
         {screen !== "feed" && (
           <div className="app-screen-layer">
-            {screen === "friends" && <FriendsScreen videos={initialVideos} onJumpOriginal={jumpToOriginal} />}
+            {screen === "friends" && <FriendsScreen videos={feedVideos} onJumpOriginal={jumpToOriginal} />}
             {screen === "messages" && <MessagesScreen />}
             {screen === "assets" && (activeAsset
               ? <AssetDetailScreen asset={activeAsset} onBack={() => setActiveAsset(null)} onPublish={() => changeScreen("publish")} onJumpOriginal={() => jumpToOriginal(activeAsset.video.id)} onOpenProduct={setSelectedProduct} />
-              : <AssetLibraryScreen assets={assets} videos={initialVideos} saved={saved} onOpenAsset={setActiveAsset} onJumpOriginal={jumpToOriginal} />)}
+              : <AssetLibraryScreen assets={assets} videos={feedVideos} saved={saved} onOpenAsset={setActiveAsset} onJumpOriginal={jumpToOriginal} />)}
             {screen === "publish" && <PublishScreen asset={publishAsset} onBack={() => changeScreen("assets")} onJumpOriginal={() => jumpToOriginal(publishAsset.video.id)} onOpenProduct={setSelectedProduct} />}
           </div>
         )}
@@ -310,6 +330,76 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
   );
 }
 
+function UploadSlide({ active, uploadCount, onUploaded }: {
+  active: boolean;
+  uploadCount: number;
+  onUploaded: (video: VideoPreset) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function uploadMedia(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!["video/mp4", "video/webm", "image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setError("请选择 MP4、WebM、JPEG、PNG 或 WebP 文件");
+      return;
+    }
+    if (file.size > 60 * 1024 * 1024) {
+      setError("文件不能超过 60MB");
+      return;
+    }
+
+    setUploading(true);
+    setError(null);
+    setStatus(file.type.startsWith("video/") ? "正在读取视频并制作首帧" : "正在整理图片预览");
+    try {
+      const posterFrame = await createMediaPoster(file);
+      setStatus("正在上传到你的内容流");
+      const form = new FormData();
+      form.set("media", file);
+      form.set("posterFrame", posterFrame);
+      const response = await fetch("/api/uploads", { method: "POST", body: form });
+      const payload = await response.json().catch(() => ({ message: "上传失败" })) as { video?: VideoPreset; message?: string };
+      if (!response.ok || !payload.video) throw new Error(payload.message ?? "上传失败");
+      onUploaded(payload.video);
+      setStatus("已加入内容流，正在打开你的场景");
+    } catch (caught) {
+      setStatus(null);
+      setError(caught instanceof Error ? caught.message : "上传失败，请重试");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <article className={`feed-slide upload-slide ${active ? "active" : ""}`}>
+      <div className="upload-aurora" aria-hidden="true"><i /><i /><i /></div>
+      <div className="upload-stage">
+        <div className="upload-kicker"><span>FEED END</span><i />轮到你的画面</div>
+        <div className="upload-lens" aria-hidden="true"><span><Camera size={34} /></span><i /></div>
+        <h2>把你刷到的场景，<br />放进这条内容流。</h2>
+        <p>上传视频或图片。视频暂停在哪一帧，AI 就从哪一帧提取场景和完整穿搭。</p>
+        <input ref={inputRef} className="upload-media-input" type="file" accept="video/mp4,video/webm,image/jpeg,image/png,image/webp" onChange={uploadMedia} />
+        <button className="upload-media-button" disabled={uploading} type="button" onClick={() => inputRef.current?.click()}>
+          {uploading ? <><span className="spinner" />{status ?? "正在上传"}</> : <><Upload size={19} />选择视频或图片</>}
+        </button>
+        {error && <p className="upload-error">{error}</p>}
+        {!error && status && !uploading && <p className="upload-success"><CheckCircle2 size={15} />{status}</p>}
+        <div className="upload-meta">
+          <span><ShieldCheck size={14} />仅用于本次内容体验</span>
+          <span><Images size={14} />已有 {uploadCount} 个我的场景</span>
+        </div>
+        <small>支持 MP4 / WebM / JPG / PNG / WebP · 最大 60MB</small>
+      </div>
+      <div className="upload-next-hint"><ChevronDown size={17} />上传成功后自动进入你的画面</div>
+    </article>
+  );
+}
+
 function FeedSlide({
   video,
   active,
@@ -332,7 +422,9 @@ function FeedSlide({
   onSave: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
   const [liked, setLiked] = useState(false);
+  const isImage = video.mediaType === "image";
 
   useEffect(() => {
     const element = videoRef.current;
@@ -346,6 +438,7 @@ function FeedSlide({
   }, [active, paused]);
 
   function togglePlayback() {
+    if (isImage) return;
     const element = videoRef.current;
     if (!element || !active) return;
     if (paused) {
@@ -359,18 +452,20 @@ function FeedSlide({
   function openTryOnFromCurrentFrame(event: React.MouseEvent<HTMLButtonElement>) {
     event.stopPropagation();
     const element = videoRef.current;
-    onTryOn(element ? captureVideoFrame(element) : null);
+    onTryOn(isImage ? captureImageFrame(imageRef.current) : element ? captureVideoFrame(element) : null);
   }
 
   function openCommentsFromCurrentFrame() {
     const element = videoRef.current;
     element?.pause();
-    onComments(element ? captureVideoFrame(element) : null);
+    onComments(isImage ? captureImageFrame(imageRef.current) : element ? captureVideoFrame(element) : null);
   }
 
   return (
     <article className={`feed-slide tone-${video.accent}`} onClick={togglePlayback}>
-      <video ref={videoRef} className="feed-media" src={video.videoUrl} poster={video.posterUrl} loop muted playsInline preload={active ? "auto" : "metadata"} />
+      {isImage
+        ? <img ref={imageRef} className="feed-media" src={video.posterUrl} alt={video.title} />
+        : <video ref={videoRef} className="feed-media" src={video.videoUrl} poster={video.posterUrl} loop muted playsInline preload={active ? "auto" : "metadata"} />}
       <div className="media-shade" />
 
       {paused && (
@@ -382,8 +477,8 @@ function FeedSlide({
         </div>
       )}
 
-      {!paused && active && <div className="tap-hint"><Pause size={13} /> 点击暂停</div>}
-      {paused && <div className="pause-glyph"><Play size={34} fill="currentColor" /></div>}
+      {!isImage && !paused && active && <div className="tap-hint"><Pause size={13} /> 点击暂停</div>}
+      {!isImage && paused && <div className="pause-glyph"><Play size={34} fill="currentColor" /></div>}
 
       <div className="feed-copy">
         <div className="location-chip">{video.location}</div>
@@ -401,6 +496,23 @@ function FeedSlide({
       </div>
     </article>
   );
+}
+
+function captureImageFrame(image: HTMLImageElement | null) {
+  if (!image?.naturalWidth || !image.naturalHeight) return null;
+  try {
+    const maxEdge = 1280;
+    const scale = Math.min(1, maxEdge / Math.max(image.naturalWidth, image.naturalHeight));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const context = canvas.getContext("2d");
+    if (!context) return null;
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.9);
+  } catch {
+    return null;
+  }
 }
 
 function captureVideoFrame(video: HTMLVideoElement) {
@@ -579,6 +691,7 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
   const faceDirections = ["正视镜头", "缓慢向左转", "缓慢向右转", "轻轻抬头", "轻轻低头"];
   const generationMessages = ["正在提交场景与授权人像", "正在整理场景、形象与身体数据", "Seedream 5.0 Lite 正在生成画面", "正在完成最终渲染"];
   const activeVersion = resultVersions.find((version) => version.id === activeVersionId) ?? resultVersions.at(-1) ?? null;
+  const activeProducts = activeVersion?.products.length ? activeVersion.products : video.products;
   const sceneReferenceUrl = sceneFrameDataUrl ?? video.posterUrl;
   const revisionSuggestions = ["换到海边日落，保留这套穿搭", "改成自然向前走的抓拍姿势", "镜头拉远，完整看到鞋子和环境"];
 
@@ -704,6 +817,13 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
 
       if (job.status === "failed") throw new Error(job.error?.message ?? job.message ?? "生图服务返回失败");
       if (job.status === "completed" && job.resultUrl) {
+        const productPending = video.userUploaded && (job.productStatus === "queued" || job.productStatus === "analyzing" || !job.productStatus);
+        if (productPending) {
+          setGenerationStage(3);
+          setGenerationStatusMessage(job.productMessage ?? "图片已生成，Luna 正在整理穿搭商品");
+          await waitForPoll();
+          continue;
+        }
         const resultResponse = await fetch(job.resultUrl, { cache: "no-store" });
         if (!resultResponse.ok) {
           const payload = await resultResponse.json().catch(() => ({ message: "生成图片暂时无法读取" }));
@@ -716,6 +836,8 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
           createdAt: "刚刚",
           resultMode: job.resultMode ?? resultResponse.headers.get("X-Demo-Mode"),
           saved: false,
+          products: job.products?.length ? job.products : video.products,
+          productStatus: job.productStatus === "failed" ? "failed" : job.productStatus === "completed" ? "completed" : "not_required",
         } satisfies LookVersion;
       }
       await waitForPoll();
@@ -787,7 +909,7 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
     return {
       id: `${video.id}-${version.id}`,
       imageUrl: version.imageUrl,
-      video,
+      video: { ...video, products: version.products.length ? version.products : video.products },
       description: version.prompt === "初始生成"
         ? `在${video.location}的光线里，用我的比例和动作重新演绎这套 ${video.analysis.tags.slice(0, 2).join("、")} Look。`
         : `继续修改：${version.prompt}`,
@@ -912,7 +1034,7 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
           <form className="flow-body confirm-step" onSubmit={generate}>
             <div className="reference-cards">
               <article><img src={sceneReferenceUrl} alt="暂停帧场景" /><span>01 / 暂停帧</span><strong>{video.location}</strong></article>
-              <article><img src={sceneReferenceUrl} alt="暂停帧完整 Look" /><span>02 / LOOK</span><strong>{video.products.length} 件完整穿搭</strong></article>
+              <article><img src={sceneReferenceUrl} alt="暂停帧完整 Look" /><span>02 / LOOK</span><strong>{video.userUploaded ? "Luna 将识别画面穿搭" : `${video.products.length} 件完整穿搭`}</strong></article>
               <article><img src={useDemoIdentity ? video.posterUrl : identityDataUrl ?? video.posterUrl} alt="人物" /><span>03 / 人物</span><strong>{useDemoIdentity ? "演示人物" : "我的形象"}</strong></article>
             </div>
             {initialProfile && <div className="profile-reuse-note"><CheckCircle2 size={18} /><div><strong>已使用你上次保存的形象</strong><span>以后从三个入口进入，都可以直接生成</span></div><button type="button" onClick={() => setStep(0)}>修改</button></div>}
@@ -966,9 +1088,10 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
               <button className={`save-result-block ${activeVersion.saved ? "saved" : ""}`} type="button" onClick={saveResult}><span>{activeVersion.saved ? <CheckCircle2 size={20} /> : <Bookmark size={20} />}<strong>{activeVersion.saved ? "这张已收藏到我的穿搭" : "收藏当前图片"}</strong></span><small>{activeVersion.saved ? "其他版本仍可继续单独收藏" : "每个生成版本都可以单独收藏和发布"}</small></button>
               <div className="result-actions"><button type="button" onClick={downloadResult}><Download size={18} />保存本地</button><button type="button" onClick={() => setStep(2)}><RotateCcw size={18} />重新设定</button><button type="button" onClick={onClose}><Play size={18} />继续刷</button></div>
               <div className="result-publish-row"><button type="button" onClick={publishResult}><Sparkles size={18} />一键发布</button><button type="button" onClick={onJumpOriginal}><Music2 size={17} />原视频 / 原声</button></div>
-              <div className="result-products-heading"><div><span>搭配同款</span><strong>把画面变成可买的 Look</strong></div><ShoppingCart size={20} /></div>
-              <div className="result-product-grid">{video.products.map((product) => <ProductCard key={product.id} product={product} onOpen={() => onOpenProduct(product)} />)}</div>
-              <button className="shop-look" type="button" onClick={() => onOpenProduct(video.products[0])}><ShoppingBag size={18} />查看这套 Look 的 {video.products.length} 件商品</button>
+              <div className="result-products-heading"><div><span>{video.userUploaded ? "Luna 识别相似款" : "搭配同款"}</span><strong>把画面变成可买的 Look</strong></div><ShoppingCart size={20} /></div>
+              {activeProducts.length > 0
+                ? <><div className="result-product-grid">{activeProducts.map((product) => <ProductCard key={product.id} product={product} onOpen={() => onOpenProduct(product)} />)}</div><button className="shop-look" type="button" onClick={() => onOpenProduct(activeProducts[0])}><ShoppingBag size={18} />查看这套 Look 的 {activeProducts.length} 件商品</button></>
+                : <div className="product-analysis-empty"><Search size={19} /><div><strong>这一帧没有识别到清晰单品</strong><span>{activeVersion.productStatus === "failed" ? "商品识别暂时未完成，生成图片仍可正常收藏" : "可以返回视频，换一帧人物与穿搭更清晰的画面"}</span></div></div>}
               <button className="back-feed" type="button" onClick={onClose}>返回继续刷视频</button>
             </div>
           </div>
@@ -985,6 +1108,59 @@ function blobToDataUrl(blob: Blob) {
     reader.onerror = () => reject(new Error("无法读取生成图片"));
     reader.readAsDataURL(blob);
   });
+}
+
+function canvasPosterFile(source: CanvasImageSource, sourceWidth: number, sourceHeight: number) {
+  const maxEdge = 1280;
+  const scale = Math.min(1, maxEdge / Math.max(sourceWidth, sourceHeight));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(sourceWidth * scale));
+  canvas.height = Math.max(1, Math.round(sourceHeight * scale));
+  const context = canvas.getContext("2d");
+  if (!context) return Promise.reject(new Error("当前浏览器无法制作媒体预览"));
+  context.fillStyle = "#0a0a0b";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(source, 0, 0, canvas.width, canvas.height);
+  return new Promise<File>((resolve, reject) => canvas.toBlob((blob) => {
+    if (!blob) reject(new Error("媒体预览生成失败"));
+    else resolve(new File([blob], "poster-frame.jpg", { type: "image/jpeg" }));
+  }, "image/jpeg", 0.88));
+}
+
+async function createMediaPoster(file: File) {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    if (file.type.startsWith("image/")) {
+      const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const element = new Image();
+        element.onload = () => resolve(element);
+        element.onerror = () => reject(new Error("图片无法读取，请换一张重试"));
+        element.src = objectUrl;
+      });
+      return await canvasPosterFile(image, image.naturalWidth, image.naturalHeight);
+    }
+
+    const video = document.createElement("video");
+    video.preload = "auto";
+    video.muted = true;
+    video.playsInline = true;
+    video.src = objectUrl;
+    await new Promise<void>((resolve, reject) => {
+      video.onloadeddata = () => resolve();
+      video.onerror = () => reject(new Error("视频无法读取，请确认文件编码为 H.264 或 WebM"));
+      video.load();
+    });
+    if (Number.isFinite(video.duration) && video.duration > 0.4) {
+      const seekTarget = Math.min(2, Math.max(0.1, video.duration * 0.12));
+      await new Promise<void>((resolve) => {
+        video.onseeked = () => resolve();
+        video.currentTime = seekTarget;
+      });
+    }
+    return await canvasPosterFile(video, video.videoWidth, video.videoHeight);
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
 }
 
 function waitForPoll() {
