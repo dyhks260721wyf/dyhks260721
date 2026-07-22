@@ -952,9 +952,9 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
   onPublish: (asset: GeneratedAsset) => void;
   onJumpOriginal: () => void;
 }) {
-  const [step, setStep] = useState(initialProfile ? 2 : 0);
+  const hasSavedIdentity = Boolean(initialProfile?.identityDataUrl);
+  const [step, setStep] = useState(hasSavedIdentity ? 2 : 0);
   const [identityDataUrl, setIdentityDataUrl] = useState<string | null>(initialProfile?.identityDataUrl ?? null);
-  const [useDemoIdentity, setUseDemoIdentity] = useState(initialProfile?.useDemoIdentity ?? true);
   const [heightCm, setHeightCm] = useState(initialProfile?.heightCm ?? 168);
   const [weightRange, setWeightRange] = useState(initialProfile?.weightRange ?? "50_60");
   const [outfitStyle, setOutfitStyle] = useState(initialProfile?.outfitStyle ?? "womenswear");
@@ -996,7 +996,7 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
 
   async function startCamera() {
     if (!navigator.mediaDevices?.getUserMedia) {
-      setError("当前浏览器无法使用摄像头，可使用演示人物继续体验");
+      setError("当前浏览器无法使用摄像头，请更换支持摄像头的浏览器后重试");
       return;
     }
     try {
@@ -1005,7 +1005,6 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
       cameraStreamRef.current = stream;
       setCameraActive(true);
       setCaptureFrames([]);
-      setUseDemoIdentity(false);
       setError(null);
       requestAnimationFrame(() => {
         if (cameraVideoRef.current) {
@@ -1014,7 +1013,7 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
         }
       });
     } catch {
-      setError("没有获得摄像头权限，请允许访问或使用演示人物继续体验");
+      setError("没有获得摄像头权限，请允许访问后重试");
     }
   }
 
@@ -1058,7 +1057,7 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
     form.set("entrySource", entrySource);
     form.set("generationMode", generationMode);
     if (sceneFrameDataUrl) form.set("sceneFrame", await dataUrlToFile(sceneFrameDataUrl, `${video.id}-paused-frame.jpg`));
-    if (identityDataUrl && !useDemoIdentity) form.set("identityBoard", await dataUrlToFile(identityDataUrl, "identity-board.jpg"));
+    if (identityDataUrl) form.set("identityBoard", await dataUrlToFile(identityDataUrl, "identity-board.jpg"));
     if (options) {
       form.set("revisionPrompt", options.revisionPrompt);
       form.set("revisionImage", await dataUrlToFile(options.revisionImageUrl, "previous-look.jpg"));
@@ -1131,7 +1130,7 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
         heightCm,
         weightRange,
         identityDataUrl,
-        useDemoIdentity,
+        useDemoIdentity: false,
         consentAccepted: true,
         updatedAt: new Date().toISOString(),
       });
@@ -1212,8 +1211,8 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
     onMinimizedChange(false);
   }
 
-  const stepTitle = ["录入你的形象", "补充身材信息", "确认生成内容", "你的场景 Look"][step];
-  const canStepBack = step > 0 && step < 3 && !(initialProfile && step === 2);
+  const stepTitle = ["录入我的形象", "补充身材信息", "确认生成内容", "你的场景 Look"][step];
+  const canStepBack = step > 0 && step < 3 && !(hasSavedIdentity && step === 2);
   const floatingState = generating ? "working" : error ? "failed" : "complete";
 
   if (minimized) {
@@ -1244,26 +1243,27 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
               <div className="face-orbit" aria-label="人脸录入预览">
                 {cameraActive
                   ? <video ref={cameraVideoRef} muted playsInline aria-label="摄像头实时预览" />
-                  : <img src={useDemoIdentity ? video.posterUrl : identityDataUrl ?? video.posterUrl} alt={useDemoIdentity ? "演示人物" : "已录入的人像"} />}
-                <span className="face-scan-line" />
-                <i className="face-corner corner-one" /><i className="face-corner corner-two" />
+                  : identityDataUrl
+                    ? <img src={identityDataUrl} alt="已录入的人像" />
+                    : <div className="face-placeholder" aria-label="等待录入人脸"><UserRound size={106} /></div>}
+                {cameraActive && <span className="face-scan-line" />}
+                {(cameraActive || identityDataUrl) && <><i className="face-corner corner-one" /><i className="face-corner corner-two" /></>}
               </div>
-              <div className="capture-direction">
-                <span>{cameraActive ? `动作 ${Math.min(captureFrames.length + 1, faceDirections.length)}/${faceDirections.length}` : useDemoIdentity ? "演示模式" : "形象已录入"}</span>
-                <strong>{cameraActive ? faceDirections[Math.min(captureFrames.length, faceDirections.length - 1)] : useDemoIdentity ? "使用当前视频人物体验完整链路" : "已保存全脸特征，可继续生成"}</strong>
-              </div>
+              {(cameraActive || identityDataUrl) && <div className="capture-direction">
+                <span>{cameraActive ? `动作 ${Math.min(captureFrames.length + 1, faceDirections.length)}/${faceDirections.length}` : "录入完成"}</span>
+                <strong>{cameraActive ? faceDirections[Math.min(captureFrames.length, faceDirections.length - 1)] : "已保存全脸特征"}</strong>
+              </div>}
               <div className="face-progress" aria-label="录入进度">
-                {faceDirections.map((direction, index) => <span key={direction} className={index < captureFrames.length || (!cameraActive && !useDemoIdentity) ? "done" : index === captureFrames.length && cameraActive ? "active" : ""}>{index < captureFrames.length || (!cameraActive && !useDemoIdentity) ? <Check size={11} /> : index + 1}<small>{direction.replace("缓慢", "").replace("轻轻", "")}</small></span>)}
+                {faceDirections.map((direction, index) => <span key={direction} className={index < captureFrames.length || (!cameraActive && Boolean(identityDataUrl)) ? "done" : index === captureFrames.length && cameraActive ? "active" : ""}>{index < captureFrames.length || (!cameraActive && Boolean(identityDataUrl)) ? <Check size={11} /> : index + 1}<small>{direction.replace("缓慢", "").replace("轻轻", "")}</small></span>)}
               </div>
               {cameraActive && <button className="capture-frame-button" disabled={captureFrames.length >= faceDirections.length} type="button" onClick={captureFaceAngle}><Camera size={18} />记录「{faceDirections[Math.min(captureFrames.length, faceDirections.length - 1)]}」</button>}
             </div>
             <div className="capture-actions">
-              <button type="button" onClick={startCamera}><Camera size={17} />{cameraActive ? "重新录入" : "动态录入"}</button>
+              <button className={identityDataUrl && !cameraActive ? "recorded" : ""} type="button" onClick={startCamera}><Camera size={17} />{cameraActive ? "重新录入" : "动态录入"}</button>
             </div>
-            <button className={`demo-identity-toggle ${useDemoIdentity ? "active" : ""}`} type="button" onClick={() => { stopCamera(); setUseDemoIdentity(true); setError(null); }}><CheckCircle2 size={16} />暂不录入，使用演示人物</button>
             <div className="privacy-note"><ShieldCheck size={17} /><p>仅上传本人或已获授权的人像；图片用于本次生成与个人 AIGC 相册，不用于身份识别。</p></div>
             {error && <p className="form-error">{error}</p>}
-            <button className="flow-primary" disabled={cameraActive || (!useDemoIdentity && !identityDataUrl)} type="button" onClick={() => setStep(1)}>继续填写身材</button>
+            <button className={`flow-primary identity-next ${identityDataUrl && !cameraActive ? "ready" : ""}`} disabled={cameraActive || !identityDataUrl} type="button" onClick={() => setStep(1)}>下一步</button>
           </div>
         )}
 
@@ -1301,7 +1301,7 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
 
         {step === 2 && (
           <form className="flow-body confirm-step" onSubmit={generate}>
-            {initialProfile && <div className="profile-reuse-note"><CheckCircle2 size={18} /><div><strong>已使用你上次保存的形象</strong></div><button type="button" onClick={() => setStep(0)}>修改</button></div>}
+            {hasSavedIdentity && <div className="profile-reuse-note"><CheckCircle2 size={18} /><div><strong>已使用你上次保存的形象</strong></div><button type="button" onClick={() => setStep(0)}>修改</button></div>}
             <section className="generation-mode-section" aria-labelledby="generation-mode-title">
               <header><div><span>RENDER MODE</span><strong id="generation-mode-title">选择生成方式</strong></div><small>生成中可以收起继续刷</small></header>
               <div className="generation-mode-selector" role="radiogroup" aria-label="生成方式">
