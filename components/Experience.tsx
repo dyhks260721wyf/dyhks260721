@@ -1203,7 +1203,6 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
   const canStepBack = step > 0 && step < 3 && !(hasSavedIdentity && step === 2);
   const floatingState = generating ? "working" : error ? "failed" : "complete";
   const selectedBodyTypeLabel = bodyTypeOptions.find(([value]) => value === bodyType)?.[1] ?? "沙漏型";
-  const selectedPoseLabel = poseOptions.find((option) => option.value === poseStyle)?.label ?? "自然抓拍";
 
   if (minimized) {
     return (
@@ -1293,14 +1292,10 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
             <section className="confirm-section confirm-profile-section" aria-labelledby="confirm-profile-title">
               <header className="confirm-section-heading"><strong id="confirm-profile-title">信息确认</strong><span>检查刚刚录入的内容</span></header>
               <div className="confirm-profile-card">
-                <div className="confirm-identity-summary">
+                <header><div><strong>我的信息档案</strong><small>已录入形象与身材信息</small></div><button type="button" onClick={() => setStep(0)}>修改</button></header>
+                <div className="confirm-profile-content">
                   <span className="confirm-identity-thumb">{identityDataUrl && <img src={identityDataUrl} alt="刚刚录入的正脸" />}</span>
-                  <div><strong>我的形象</strong><small>已录入 5 个角度</small></div>
-                  <button type="button" onClick={() => setStep(0)}>修改</button>
-                </div>
-                <div className="confirm-body-summary">
-                  <header><div><strong>身材信息</strong><small>{selectedBodyTypeLabel}</small></div><button type="button" onClick={() => setStep(1)}>修改</button></header>
-                  <div><span>{outfitStyle === "menswear" ? "男士穿搭" : "女士穿搭"}</span><span>{heightCm} cm</span><span>{weightKg} kg</span><span>{selectedPoseLabel}</span></div>
+                  <div className="confirm-profile-tags"><span>{outfitStyle === "menswear" ? "男士穿搭" : "女士穿搭"}</span><span>{heightCm} cm</span><span>{weightKg} kg</span><span>{selectedBodyTypeLabel}</span></div>
                 </div>
               </div>
             </section>
