@@ -63,7 +63,8 @@ type UserTryOnProfile = {
   bodyType: string;
   poseStyle: PoseStyle;
   heightCm: number;
-  weightRange: string;
+  weightKg?: number;
+  weightRange?: string;
   identityDataUrl: string | null;
   useDemoIdentity: boolean;
   consentAccepted: boolean;
@@ -114,6 +115,7 @@ const poseOptions: Array<{ value: PoseStyle; label: string; hint: string }> = [
   { value: "glance", label: "氛围回眸", hint: "转身看向镜头" },
   { value: "editorial", label: "时尚大片", hint: "不对称镜头姿势" },
 ];
+const legacyWeightMidpoints: Record<string, number> = { under_50: 47, "50_60": 55, "60_70": 65, "70_85": 77, over_85: 90 };
 
 export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) {
   const [feedVideos, setFeedVideos] = useState(initialVideos);
@@ -956,7 +958,7 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
   const [step, setStep] = useState(hasSavedIdentity ? 2 : 0);
   const [identityDataUrl, setIdentityDataUrl] = useState<string | null>(initialProfile?.identityDataUrl ?? null);
   const [heightCm, setHeightCm] = useState(initialProfile?.heightCm ?? 168);
-  const [weightRange, setWeightRange] = useState(initialProfile?.weightRange ?? "50_60");
+  const [weightKg, setWeightKg] = useState(initialProfile?.weightKg ?? legacyWeightMidpoints[initialProfile?.weightRange ?? "50_60"] ?? 55);
   const [outfitStyle, setOutfitStyle] = useState(initialProfile?.outfitStyle ?? "womenswear");
   const [bodyType, setBodyType] = useState(initialProfile?.bodyType ?? "hourglass");
   const [poseStyle, setPoseStyle] = useState<PoseStyle>(initialProfile?.poseStyle ?? "candid");
@@ -1049,7 +1051,7 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
     const form = new FormData();
     form.set("videoId", video.id);
     form.set("heightCm", String(heightCm));
-    form.set("weightRange", weightRange);
+    form.set("weightKg", String(weightKg));
     form.set("bodyType", bodyType);
     form.set("poseStyle", poseStyle);
     form.set("outfitStyle", outfitStyle);
@@ -1128,7 +1130,7 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
         bodyType,
         poseStyle,
         heightCm,
-        weightRange,
+        weightKg,
         identityDataUrl,
         useDemoIdentity: false,
         consentAccepted: true,
@@ -1273,8 +1275,8 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
             <div className="segmented"><button className={outfitStyle === "womenswear" ? "active" : ""} type="button" onClick={() => setOutfitStyle("womenswear")}>女士穿搭</button><button className={outfitStyle === "menswear" ? "active" : ""} type="button" onClick={() => setOutfitStyle("menswear")}>男士穿搭</button></div>
             <label className="field-label">身材类型</label>
             <div className="body-type-grid">
-              {[["hourglass", "沙漏型"], ["triangle", "倒三角"], ["pear", "梨型"], ["rectangle", "直筒型"]].map(([value, label], index) => (
-                <button className={bodyType === value ? "active" : ""} key={value} type="button" onClick={() => setBodyType(value)}><span className={`body-shape shape-${index}`}><UserRound size={31} /></span><strong>{label}</strong>{bodyType === value && <CheckCircle2 size={14} />}</button>
+              {[["pear", "梨形"], ["triangle", "倒三角形"], ["hourglass", "沙漏型"], ["rectangle", "H 型"], ["apple", "苹果型"]].map(([value, label]) => (
+                <button className={bodyType === value ? "active" : ""} key={value} type="button" onClick={() => setBodyType(value)}><span className={`body-shape shape-${value}`}><UserRound size={28} /></span><strong>{label}</strong>{bodyType === value && <CheckCircle2 size={13} />}</button>
               ))}
             </div>
             <label className="field-label"><span>动作氛围</span><small>不复刻原视频姿势</small></label>
@@ -1288,14 +1290,13 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
               ))}
             </div>
             <label className="field-label" htmlFor="height">身高 <strong>{heightCm} cm</strong></label>
-            <input id="height" className="height-range" type="range" min="140" max="210" value={heightCm} onChange={(event) => setHeightCm(Number(event.target.value))} />
+            <input id="height" className="measure-range" type="range" min="140" max="210" value={heightCm} onChange={(event) => setHeightCm(Number(event.target.value))} />
             <div className="range-labels"><span>140</span><span>175</span><span>210</span></div>
-            <label className="field-label">体重范围</label>
-            <div className="weight-grid">
-              {[['under_50', '50kg 以下'], ['50_60', '50–60kg'], ['60_70', '60–70kg'], ['70_85', '70–85kg'], ['over_85', '85kg 以上']].map(([value, label]) => <button className={weightRange === value ? "active" : ""} key={value} type="button" onClick={() => setWeightRange(value)}>{label}</button>)}
-            </div>
+            <label className="field-label" htmlFor="weight">体重 <strong>{weightKg} kg</strong></label>
+            <input id="weight" className="measure-range" type="range" min="35" max="120" value={weightKg} onChange={(event) => setWeightKg(Number(event.target.value))} />
+            <div className="range-labels"><span>35</span><span>78</span><span>120</span></div>
             <p className="profile-hint">生成时会按身高、体重与体型重建全身比例，并重新编排姿势；结果仅作视觉预览，不提供尺码判断。</p>
-            <button className="flow-primary" type="button" onClick={() => setStep(2)}>确认这些信息</button>
+            <button className="flow-primary" type="button" onClick={() => setStep(2)}>下一步</button>
           </div>
         )}
 

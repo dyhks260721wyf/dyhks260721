@@ -6,14 +6,6 @@ import { readUserContent, userContentFile } from "@/lib/user-content";
 
 export const runtime = "nodejs";
 
-const weightLabels: Record<string, string> = {
-  under_50: "under 50 kg",
-  "50_60": "50 to 60 kg",
-  "60_70": "60 to 70 kg",
-  "70_85": "70 to 85 kg",
-  over_85: "over 85 kg",
-};
-
 const bodyProfiles: Record<string, { label: string; instruction: string }> = {
   hourglass: {
     label: "hourglass",
@@ -30,6 +22,10 @@ const bodyProfiles: Record<string, { label: string; instruction: string }> = {
   rectangle: {
     label: "rectangle",
     instruction: "shoulders, waist and hips have closer visual widths, with a straighter torso and only a subtle waist definition",
+  },
+  apple: {
+    label: "apple",
+    instruction: "the torso carries natural fullness through the midsection, with comparatively slimmer hips and legs and a softly defined waist",
   },
 };
 
@@ -52,10 +48,10 @@ const poseProfiles: Record<string, { label: string; instruction: string }> = {
   },
 };
 
-const weightMidpoints: Record<string, number> = { under_50: 47, "50_60": 55, "60_70": 65, "70_85": 77, over_85: 90 };
+const legacyWeightMidpoints: Record<string, number> = { under_50: 47, "50_60": 55, "60_70": 65, "70_85": 77, over_85: 90 };
 
-function statureInstruction(heightCm: number, weightRange: string) {
-  const bmi = weightMidpoints[weightRange] / ((heightCm / 100) ** 2);
+function statureInstruction(heightCm: number, weightKg: number) {
+  const bmi = weightKg / ((heightCm / 100) ** 2);
   const heightShape = heightCm < 158
     ? "a shorter stature with proportionally compact vertical lines"
     : heightCm > 175
@@ -86,7 +82,9 @@ export async function POST(request: Request) {
     const uploadedRecord = videoId.startsWith("user-") ? await readUserContent(videoId) : null;
     const video = findVideo(videoId) ?? uploadedRecord?.video;
     const heightCm = Number(form.get("heightCm") ?? 168);
-    const weightRange = String(form.get("weightRange") ?? "50_60");
+    const legacyWeightRange = String(form.get("weightRange") ?? "50_60");
+    const requestedWeightKg = form.has("weightKg") ? Number(form.get("weightKg")) : Number.NaN;
+    const weightKg = Number.isFinite(requestedWeightKg) ? requestedWeightKg : legacyWeightMidpoints[legacyWeightRange] ?? 55;
     const bodyType = String(form.get("bodyType") ?? "hourglass");
     const poseStyle = String(form.get("poseStyle") ?? "candid");
     const outfitStyle = String(form.get("outfitStyle") ?? "womenswear");
@@ -103,7 +101,7 @@ export async function POST(request: Request) {
     if (!consentAccepted) {
       return Response.json({ code: "CONSENT_REQUIRED", message: "请先确认人像使用授权", requestId }, { status: 400 });
     }
-    if (!Number.isFinite(heightCm) || heightCm < 140 || heightCm > 210 || !weightLabels[weightRange] || !bodyProfiles[bodyType] || !poseProfiles[poseStyle]) {
+    if (!Number.isFinite(heightCm) || heightCm < 140 || heightCm > 210 || !Number.isFinite(weightKg) || weightKg < 35 || weightKg > 120 || !bodyProfiles[bodyType] || !poseProfiles[poseStyle]) {
       return Response.json({ code: "INVALID_INPUT", message: "请检查身高、体重、身材类型和姿势偏好", requestId }, { status: 400 });
     }
     if ((revision instanceof File && revision.size > 0) !== Boolean(revisionPrompt)) {
@@ -159,9 +157,9 @@ export async function POST(request: Request) {
       outfitStyle: outfitStyle === "menswear" ? "menswear" : "womenswear",
       bodyType: bodyProfiles[bodyType].label,
       bodyShapeInstruction: bodyProfiles[bodyType].instruction,
-      statureInstruction: statureInstruction(heightCm, weightRange),
+      statureInstruction: statureInstruction(heightCm, weightKg),
       heightCm,
-      weightLabel: weightLabels[weightRange],
+      weightLabel: `${weightKg} kg`,
       poseStyle: poseProfiles[poseStyle].label,
       poseInstruction: poseProfiles[poseStyle].instruction,
       analyzeProducts: Boolean(video.userUploaded),
