@@ -15,6 +15,8 @@ import {
   Home,
   Image as ImageIcon,
   Images,
+  MapPin,
+  Megaphone,
   MessageCircle,
   Minimize2,
   MoreHorizontal,
@@ -23,6 +25,7 @@ import {
   Play,
   Plus,
   Search,
+  ScanLine,
   Send,
   ShieldCheck,
   Share2,
@@ -35,6 +38,7 @@ import {
   Square,
   SwitchCamera,
   Truck,
+  Tags,
   Upload,
   User,
   UserRound,
@@ -324,7 +328,7 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
             {screen === "assets" && (activeAsset
               ? <AssetDetailScreen asset={activeAsset} onBack={() => setActiveAsset(null)} onPublish={() => changeScreen("publish")} onJumpOriginal={() => jumpToOriginal(activeAsset.video.id)} />
               : <AssetLibraryScreen assets={assets} videos={feedVideos} saved={saved} onOpenAsset={setActiveAsset} onJumpOriginal={jumpToOriginal} />)}
-            {screen === "publish" && <PublishScreen asset={publishAsset} onBack={() => changeScreen("assets")} onJumpOriginal={() => jumpToOriginal(publishAsset.video.id)} onOpenProduct={setSelectedProduct} />}
+            {screen === "publish" && <PublishScreen asset={publishAsset} onBack={() => changeScreen("assets")} />}
           </div>
         )}
 
@@ -1588,21 +1592,64 @@ function AssetDetailScreen({ asset, onBack, onPublish, onJumpOriginal }: { asset
   );
 }
 
-function PublishScreen({ asset, onBack, onJumpOriginal, onOpenProduct }: { asset: GeneratedAsset; onBack: () => void; onJumpOriginal: () => void; onOpenProduct: (product: ProductPreset) => void }) {
-  const [caption, setCaption] = useState(asset.description);
+function PublishScreen({ asset, onBack }: { asset: GeneratedAsset; onBack: () => void }) {
+  const [title, setTitle] = useState("");
+  const [caption, setCaption] = useState("");
   const [published, setPublished] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const [declared, setDeclared] = useState(false);
+
+  const publish = () => {
+    setPublished(true);
+    window.setTimeout(() => setPublished(false), 2200);
+  };
+
   return (
     <section className="app-screen publish-screen">
-      <header className="publish-header"><button type="button" onClick={onBack} aria-label="返回"><ArrowLeft size={21} /></button><div><span>CREATE POST</span><h2>发布场景穿搭</h2></div><button className="publish-submit" type="button" disabled={published} onClick={() => setPublished(true)}>{published ? "已发布" : "发布"}</button></header>
-      <div className="publish-scroll">
-        <GeneratedImageStage className="publish-preview" src={asset.imageUrl} alt="发布图片预览"><span><Sparkles size={13} />AIGC 图片</span></GeneratedImageStage>
-        <label className="caption-field"><span>说说这张图</span><textarea value={caption} maxLength={180} onChange={(event) => setCaption(event.target.value)} /><small>{caption.length}/180</small></label>
-        <button className="source-row" type="button" onClick={onJumpOriginal}><img src={asset.video.posterUrl} alt="原视频" /><div><span>使用原视频音乐</span><strong>{asset.video.audio}</strong><small>内容可溯源至 @{asset.video.author}</small></div><ChevronRight size={18} /></button>
-        <div className="publish-options"><button type="button"><User size={17} />谁可以看 <span>公开 <ChevronRight size={15} /></span></button><button type="button"><Images size={17} />保存到相册 <span><CheckCircle2 size={16} /></span></button></div>
-        <div className="section-heading"><div><span>ADD PRODUCTS</span><strong>关联同款商品</strong></div><span>{asset.video.products.length} 件</span></div>
-        <div className="publish-products">{asset.video.products.map((product) => <button key={product.id} type="button" onClick={() => onOpenProduct(product)}><img src={product.imageUrl} style={{ objectPosition: product.imagePosition }} alt={product.name} /><div><strong>{product.name}</strong><span>{product.priceLabel}</span></div><CheckCircle2 size={18} /></button>)}</div>
-        {published && <div className="publish-success"><CheckCircle2 size={22} /><div><strong>发布成功</strong><span>作品已进入你的主页与 AIGC 相册。</span></div></div>}
+      <header className="publish-compose-header">
+        <button type="button" onClick={onBack} aria-label="返回"><ArrowLeft size={26} /></button>
+        <button type="button" onClick={() => setPreviewing(true)}>预览</button>
+      </header>
+
+      <div className="publish-compose-scroll">
+        <div className="publish-cover-block">
+          <GeneratedImageStage className="publish-cover" src={asset.imageUrl} alt="作品封面">
+            <button type="button"><Sparkles size={15} /><span>编辑封面</span></button>
+          </GeneratedImageStage>
+          <div className="publish-media-strip">
+            <button className="active" type="button" aria-label="当前图片"><img src={asset.imageUrl} alt="" /></button>
+            <button type="button" aria-label="添加图片"><Plus size={24} /></button>
+          </div>
+        </div>
+
+        <div className="publish-copy-fields">
+          <input value={title} maxLength={30} onChange={(event) => setTitle(event.target.value)} placeholder="添加标题" aria-label="作品标题" />
+          <textarea value={caption} maxLength={300} onChange={(event) => setCaption(event.target.value)} placeholder="添加作品描述…" aria-label="作品描述" />
+        </div>
+
+        <div className="publish-mention-row">
+          <button type="button"><strong>#</strong>话题</button>
+          <button type="button"><AtSign size={17} />朋友</button>
+          <button type="button" aria-label="展开编辑区域"><ScanLine size={18} /></button>
+        </div>
+
+        <div className="publish-setting-list">
+          <button className="publish-setting-row" type="button"><MapPin size={20} /><strong>选择地点</strong><ChevronRight size={18} /></button>
+          <div className="publish-setting-chips"><button type="button">{asset.video.location}</button><button type="button">旅行穿搭</button><button type="button">场景拍照</button></div>
+          <button className="publish-setting-row" type="button"><Tags size={20} /><strong>添加标签</strong><ChevronRight size={18} /></button>
+          <div className="publish-setting-chips"><button type="button">AI 场景穿搭</button><button type="button">我的穿搭</button></div>
+          <button className={`publish-setting-row ${declared ? "selected" : ""}`} type="button" onClick={() => setDeclared((value) => !value)}><Megaphone size={20} /><strong>{declared ? "已添加自主声明" : "添加自主声明"}</strong><span>{declared ? "内容由 AI 辅助生成" : <ChevronRight size={18} />}</span></button>
+        </div>
       </div>
+
+      <footer className="publish-compose-footer">
+        <button className="publish-share" type="button"><Share2 size={22} /><span>分享</span></button>
+        <button className="publish-visibility" type="button"><span><img src={asset.imageUrl} alt="" /></span><strong>公开发布</strong><ChevronDown size={15} /></button>
+        <button className="publish-final" type="button" onClick={publish}><Upload size={19} />发布作品</button>
+      </footer>
+
+      {previewing && <div className="publish-full-preview"><GeneratedImageStage src={asset.imageUrl} alt="作品预览" /><button type="button" onClick={() => setPreviewing(false)} aria-label="关闭预览"><X size={23} /></button></div>}
+      {published && <div className="publish-toast"><CheckCircle2 size={19} /><span>作品发布成功</span></div>}
     </section>
   );
 }
