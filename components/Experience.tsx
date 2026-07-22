@@ -68,6 +68,15 @@ type GeneratedAsset = {
   createdAt: string;
 };
 
+type LookVersion = {
+  id: string;
+  imageUrl: string;
+  prompt: string;
+  createdAt: string;
+  resultMode: string | null;
+  saved: boolean;
+};
+
 type GenerationJobPayload = {
   jobId: string;
   status: "queued" | "processing" | "completed" | "failed";
@@ -559,20 +568,29 @@ function TryOnFlow({ video, entrySource, initialProfile, onClose, onSaveProfile,
   const [generating, setGenerating] = useState(false);
   const [generationStage, setGenerationStage] = useState(0);
   const [generationStatusMessage, setGenerationStatusMessage] = useState<string | null>(null);
-  const [resultUrl, setResultUrl] = useState<string | null>(null);
-  const [resultMode, setResultMode] = useState<string | null>(null);
+  const [resultVersions, setResultVersions] = useState<LookVersion[]>([]);
+  const [activeVersionId, setActiveVersionId] = useState<string | null>(null);
+  const [revisionPrompt, setRevisionPrompt] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [resultSaved, setResultSaved] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [captureFrames, setCaptureFrames] = useState<string[]>([]);
   const cameraVideoRef = useRef<HTMLVideoElement>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
+  const revisionInputRef = useRef<HTMLTextAreaElement>(null);
+  const versionRailRef = useRef<HTMLDivElement>(null);
   const faceDirections = ["正视镜头", "缓慢向左转", "缓慢向右转", "轻轻抬头", "轻轻低头"];
   const generationMessages = ["正在提交场景与授权人像", "正在整理场景、形象与身体数据", "Seedream 5.0 Lite 正在生成画面", "正在完成最终渲染"];
+  const activeVersion = resultVersions.find((version) => version.id === activeVersionId) ?? resultVersions.at(-1) ?? null;
+  const revisionSuggestions = ["换到海边日落，保留这套穿搭", "改成自然向前走的抓拍姿势", "镜头拉远，完整看到鞋子和环境"];
 
   useEffect(() => () => {
     cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
   }, []);
+
+  useEffect(() => {
+    const rail = versionRailRef.current;
+    if (rail && resultVersions.length > 1) rail.scrollTo({ left: rail.scrollWidth, behavior: "smooth" });
+  }, [resultVersions.length]);
 
   async function chooseFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -647,6 +665,63 @@ function TryOnFlow({ video, entrySource, initialProfile, onClose, onSaveProfile,
     }
   }
 
+  async function requestLookVersion(options?: { revisionPrompt: string; revisionImageUrl: string }) {
+    const form = new FormData();
+    form.set("videoId", video.id);
+    form.set("heightCm", String(heightCm));
+    form.set("weightRange", weightRange);
+    form.set("bodyType", bodyType);
+    form.set("poseStyle", poseStyle);
+    form.set("outfitStyle", outfitStyle);
+    form.set("consentAccepted", "true");
+    form.set("entrySource", entrySource);
+    if (identityDataUrl && !useDemoIdentity) form.set("identityBoard", await dataUrlToFile(identityDataUrl, "identity-board.jpg"));
+    if (options) {
+      form.set("revisionPrompt", options.revisionPrompt);
+      form.set("revisionImage", await dataUrlToFile(options.revisionImageUrl, "previous-look.jpg"));
+    }
+
+    const createResponse = await fetch("/api/generate", { method: "POST", body: form });
+    const created = await createResponse.json().catch(() => ({ message: "生成任务创建失败" })) as GenerationJobPayload & { message?: string };
+    if (!createResponse.ok || !created.jobId) throw new Error(created.message ?? "生成任务创建失败");
+
+    const statusUrl = created.statusUrl ?? `/api/generate/${created.jobId}`;
+    for (;;) {
+      let statusResponse: Response;
+      try {
+        statusResponse = await fetch(statusUrl, { cache: "no-store" });
+      } catch {
+        setGenerationStatusMessage("网络连接暂时中断，正在继续等待生成任务");
+        await waitForPoll();
+        continue;
+      }
+      const job = await statusResponse.json().catch(() => ({ message: "无法读取生成状态" })) as GenerationJobPayload & { message?: string };
+      if (!statusResponse.ok) throw new Error(job.message ?? "无法读取生成状态");
+
+      setGenerationStatusMessage(job.message ?? null);
+      const stageIndex = job.stage === "rendering" ? 3 : job.stage === "generating" ? 2 : job.stage === "analyzing" ? 1 : 0;
+      setGenerationStage(stageIndex);
+
+      if (job.status === "failed") throw new Error(job.error?.message ?? job.message ?? "生图服务返回失败");
+      if (job.status === "completed" && job.resultUrl) {
+        const resultResponse = await fetch(job.resultUrl, { cache: "no-store" });
+        if (!resultResponse.ok) {
+          const payload = await resultResponse.json().catch(() => ({ message: "生成图片暂时无法读取" }));
+          throw new Error(payload.message ?? "生成图片暂时无法读取");
+        }
+        return {
+          id: created.jobId,
+          imageUrl: job.resultUrl,
+          prompt: options?.revisionPrompt ?? "初始生成",
+          createdAt: "刚刚",
+          resultMode: job.resultMode ?? resultResponse.headers.get("X-Demo-Mode"),
+          saved: false,
+        } satisfies LookVersion;
+      }
+      await waitForPoll();
+    }
+  }
+
   async function generate(event: FormEvent) {
     event.preventDefault();
     if (!consent) { setError("请确认你有权使用这张人像"); return; }
@@ -667,53 +742,10 @@ function TryOnFlow({ video, entrySource, initialProfile, onClose, onSaveProfile,
         consentAccepted: true,
         updatedAt: new Date().toISOString(),
       });
-      const form = new FormData();
-      form.set("videoId", video.id);
-      form.set("heightCm", String(heightCm));
-      form.set("weightRange", weightRange);
-      form.set("bodyType", bodyType);
-      form.set("poseStyle", poseStyle);
-      form.set("outfitStyle", outfitStyle);
-      form.set("consentAccepted", "true");
-      form.set("entrySource", entrySource);
-      if (identityDataUrl && !useDemoIdentity) form.set("identityBoard", await dataUrlToFile(identityDataUrl, "identity-board.jpg"));
-
-      const createResponse = await fetch("/api/generate", { method: "POST", body: form });
-      const created = await createResponse.json().catch(() => ({ message: "生成任务创建失败" })) as GenerationJobPayload & { message?: string };
-      if (!createResponse.ok || !created.jobId) throw new Error(created.message ?? "生成任务创建失败");
-
-      const statusUrl = created.statusUrl ?? `/api/generate/${created.jobId}`;
-      for (;;) {
-        let statusResponse: Response;
-        try {
-          statusResponse = await fetch(statusUrl, { cache: "no-store" });
-        } catch {
-          setGenerationStatusMessage("网络连接暂时中断，正在继续等待生成任务");
-          await waitForPoll();
-          continue;
-        }
-        const job = await statusResponse.json().catch(() => ({ message: "无法读取生成状态" })) as GenerationJobPayload & { message?: string };
-        if (!statusResponse.ok) throw new Error(job.message ?? "无法读取生成状态");
-
-        setGenerationStatusMessage(job.message ?? null);
-        const stageIndex = job.stage === "rendering" ? 3 : job.stage === "generating" ? 2 : job.stage === "analyzing" ? 1 : 0;
-        setGenerationStage(stageIndex);
-
-        if (job.status === "failed") throw new Error(job.error?.message ?? job.message ?? "生图服务返回失败");
-        if (job.status === "completed" && job.resultUrl) {
-          const resultResponse = await fetch(job.resultUrl, { cache: "no-store" });
-          if (!resultResponse.ok) {
-            const payload = await resultResponse.json().catch(() => ({ message: "生成图片暂时无法读取" }));
-            throw new Error(payload.message ?? "生成图片暂时无法读取");
-          }
-          const dataUrl = await blobToDataUrl(await resultResponse.blob());
-          setResultUrl(dataUrl);
-          setResultMode(job.resultMode ?? resultResponse.headers.get("X-Demo-Mode"));
-          setStep(3);
-          break;
-        }
-        await waitForPoll();
-      }
+      const version = await requestLookVersion();
+      setResultVersions([version]);
+      setActiveVersionId(version.id);
+      setStep(3);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "生成没有完成");
     } finally {
@@ -721,30 +753,54 @@ function TryOnFlow({ video, entrySource, initialProfile, onClose, onSaveProfile,
     }
   }
 
+  async function refineResult(event: FormEvent) {
+    event.preventDefault();
+    const request = revisionPrompt.trim();
+    if (!activeVersion || request.length < 2) return;
+    setGenerating(true);
+    setGenerationStage(0);
+    setGenerationStatusMessage("正在提交你的修改需求");
+    setError(null);
+
+    try {
+      const version = await requestLookVersion({ revisionPrompt: request, revisionImageUrl: activeVersion.imageUrl });
+      setResultVersions((current) => [...current, version]);
+      setActiveVersionId(version.id);
+      setRevisionPrompt("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "新版本没有生成完成");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
   function downloadResult() {
-    if (!resultUrl) return;
+    if (!activeVersion) return;
     const anchor = document.createElement("a");
-    anchor.href = resultUrl;
-    anchor.download = `scene-fit-${video.id}.jpg`;
+    anchor.href = activeVersion.imageUrl;
+    anchor.download = `scene-fit-${video.id}-${activeVersion.id}.jpg`;
     anchor.click();
   }
 
-  function buildAsset(): GeneratedAsset | null {
-    if (!resultUrl) return null;
+  function buildAsset(version: LookVersion | null = activeVersion): GeneratedAsset | null {
+    if (!version) return null;
     return {
-      id: `${video.id}-${Date.now()}`,
-      imageUrl: resultUrl,
+      id: `${video.id}-${version.id}`,
+      imageUrl: version.imageUrl,
       video,
-      description: `在${video.location}的光线里，用我的比例和动作重新演绎这套 ${video.analysis.tags.slice(0, 2).join("、")} Look。`,
-      createdAt: "刚刚",
+      description: version.prompt === "初始生成"
+        ? `在${video.location}的光线里，用我的比例和动作重新演绎这套 ${video.analysis.tags.slice(0, 2).join("、")} Look。`
+        : `继续修改：${version.prompt}`,
+      createdAt: version.createdAt,
     };
   }
 
   function saveResult() {
-    const asset = buildAsset();
+    if (!activeVersion || activeVersion.saved) return;
+    const asset = buildAsset(activeVersion);
     if (!asset) return;
     onSaveAsset(asset);
-    setResultSaved(true);
+    setResultVersions((current) => current.map((version) => version.id === activeVersion.id ? { ...version, saved: true } : version));
   }
 
   function publishResult() {
@@ -844,17 +900,46 @@ function TryOnFlow({ video, entrySource, initialProfile, onClose, onSaveProfile,
           </form>
         )}
 
-        {step === 3 && resultUrl && (
+        {step === 3 && activeVersion && (
           <div className="result-step">
-            <GeneratedImageStage className="result-image-stage" src={resultUrl} alt="生成的场景穿搭结果">
-              <div className="result-topline"><span><Sparkles size={14} /> {resultMode === "seedream-generation" ? "Seedream · AI 场景试穿" : "本地演示结果"}</span><small>{video.location}</small></div>
+            <GeneratedImageStage className="result-image-stage" src={activeVersion.imageUrl} alt={`生成的场景穿搭结果，第 ${resultVersions.findIndex((version) => version.id === activeVersion.id) + 1} 个版本`}>
+              <div className="result-topline"><span><Sparkles size={14} /> {activeVersion.resultMode === "seedream-generation" ? "Seedream · AI 场景试穿" : "本地演示结果"}</span><small>{resultVersions.findIndex((version) => version.id === activeVersion.id) + 1} / {resultVersions.length}</small></div>
+              {generating && <div className="revision-image-progress" role="status"><span className="spinner" /><strong>{generationStatusMessage ?? generationMessages[generationStage]}</strong><small>正在保留当前版本，并生成一张新照片</small></div>}
             </GeneratedImageStage>
             <div className="result-panel">
+              <section className="revision-studio" aria-label="继续修改图片">
+                <header><span><WandSparkles size={16} /></span><div><strong>继续改这张</strong><small>说出你想换的场景、姿势或镜头</small></div><em>{revisionPrompt.length}/300</em></header>
+                <div className="revision-suggestions" aria-label="修改建议">
+                  {revisionSuggestions.map((suggestion) => <button key={suggestion} disabled={generating} type="button" onClick={() => { setRevisionPrompt(suggestion); revisionInputRef.current?.focus(); }}>{suggestion}</button>)}
+                </div>
+                <form className="revision-composer" onSubmit={refineResult}>
+                  <WandSparkles size={18} aria-hidden="true" />
+                  <textarea ref={revisionInputRef} value={revisionPrompt} maxLength={300} rows={1} disabled={generating} aria-label="输入图片修改需求" placeholder="例如：换到雨后的上海街头，改成自然回眸…" onChange={(event) => setRevisionPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} />
+                  <button disabled={generating || revisionPrompt.trim().length < 2} type="submit" aria-label="生成新版本">{generating ? <span className="spinner" /> : <Send size={18} />}</button>
+                </form>
+                {error && <p className="revision-error">{error}</p>}
+                <p className="revision-wait-note">生成期间可以继续查看当前照片；未返回明确错误时会持续等待。</p>
+              </section>
+
+              <section className="version-history" aria-label="生成版本">
+                <header><div><strong>这次生成的照片</strong><span>点选查看，喜欢的可以逐张收藏</span></div><b>{resultVersions.length} 张</b></header>
+                <div className="version-rail" ref={versionRailRef}>
+                  {resultVersions.map((version, index) => (
+                    <button className={version.id === activeVersion.id ? "active" : ""} key={version.id} type="button" onClick={() => setActiveVersionId(version.id)} aria-label={`查看第 ${index + 1} 张照片`}>
+                      <img src={version.imageUrl} alt="" />
+                      <span>V{index + 1}</span>
+                      {version.saved && <i><Bookmark size={10} fill="currentColor" /></i>}
+                    </button>
+                  ))}
+                  {generating && <div className="version-pending"><span className="spinner" /><small>V{resultVersions.length + 1}</small></div>}
+                </div>
+              </section>
+
               <span className="result-emotion">这一刻，场景终于有了你的样子</span>
-              <h4>你已经在这个场景里了。</h4>
-              <p>{`画面保留了${video.location}的光线、氛围与原视频完整 Look，并按你的身材比例和「${poseOptions.find((item) => item.value === poseStyle)?.label}」重新编排。`}</p>
-              <button className={`save-result-block ${resultSaved ? "saved" : ""}`} type="button" onClick={saveResult}><span>{resultSaved ? <CheckCircle2 size={20} /> : <Bookmark size={20} />}<strong>{resultSaved ? "已收藏到我的穿搭" : "收藏图片"}</strong></span><small>{resultSaved ? "可前往「我–收藏–我的穿搭」查看" : "收藏后可进入个人页发布作品"}</small></button>
-              <div className="result-actions"><button type="button" onClick={downloadResult}><Download size={18} />保存本地</button><button type="button" onClick={() => setStep(2)}><RotateCcw size={18} />再生成</button><button type="button" onClick={onClose}><Play size={18} />继续刷</button></div>
+              <h4>{activeVersion.prompt === "初始生成" ? "你已经在这个场景里了。" : "你的新想法，也已经入镜。"}</h4>
+              <p>{activeVersion.prompt === "初始生成" ? `画面保留了${video.location}的光线、氛围与原视频完整 Look，并按你的身材比例和「${poseOptions.find((item) => item.value === poseStyle)?.label}」重新编排。` : `本次修改：${activeVersion.prompt}`}</p>
+              <button className={`save-result-block ${activeVersion.saved ? "saved" : ""}`} type="button" onClick={saveResult}><span>{activeVersion.saved ? <CheckCircle2 size={20} /> : <Bookmark size={20} />}<strong>{activeVersion.saved ? "这张已收藏到我的穿搭" : "收藏当前图片"}</strong></span><small>{activeVersion.saved ? "其他版本仍可继续单独收藏" : "每个生成版本都可以单独收藏和发布"}</small></button>
+              <div className="result-actions"><button type="button" onClick={downloadResult}><Download size={18} />保存本地</button><button type="button" onClick={() => setStep(2)}><RotateCcw size={18} />重新设定</button><button type="button" onClick={onClose}><Play size={18} />继续刷</button></div>
               <div className="result-publish-row"><button type="button" onClick={publishResult}><Sparkles size={18} />一键发布</button><button type="button" onClick={onJumpOriginal}><Music2 size={17} />原视频 / 原声</button></div>
               <div className="result-products-heading"><div><span>搭配同款</span><strong>把画面变成可买的 Look</strong></div><ShoppingCart size={20} /></div>
               <div className="result-product-grid">{video.products.map((product) => <ProductCard key={product.id} product={product} onOpen={() => onOpenProduct(product)} />)}</div>

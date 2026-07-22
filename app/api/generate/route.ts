@@ -90,6 +90,8 @@ export async function POST(request: Request) {
     const outfitStyle = String(form.get("outfitStyle") ?? "womenswear");
     const consentAccepted = String(form.get("consentAccepted")) === "true";
     const identity = form.get("identityBoard");
+    const revision = form.get("revisionImage");
+    const revisionPrompt = String(form.get("revisionPrompt") ?? "").trim();
 
     if (!video || !video.eligible) {
       return Response.json({ code: "VIDEO_NOT_ELIGIBLE", message: "当前内容暂不支持 AI 上身", requestId }, { status: 400 });
@@ -99,6 +101,12 @@ export async function POST(request: Request) {
     }
     if (!Number.isFinite(heightCm) || heightCm < 140 || heightCm > 210 || !weightLabels[weightRange] || !bodyProfiles[bodyType] || !poseProfiles[poseStyle]) {
       return Response.json({ code: "INVALID_INPUT", message: "请检查身高、体重、身材类型和姿势偏好", requestId }, { status: 400 });
+    }
+    if ((revision instanceof File && revision.size > 0) !== Boolean(revisionPrompt)) {
+      return Response.json({ code: "INVALID_REVISION", message: "继续修改时需要同时提供上一张图片和修改要求", requestId }, { status: 400 });
+    }
+    if (revisionPrompt.length > 300) {
+      return Response.json({ code: "REVISION_TOO_LONG", message: "修改要求请控制在 300 字以内", requestId }, { status: 400 });
     }
 
     const sceneBytes = await readFile(publicFile(video.posterUrl));
@@ -111,12 +119,24 @@ export async function POST(request: Request) {
       identityBytes = Buffer.from(await identity.arrayBuffer());
       identityType = identity.type;
     }
+    let revisionBytes: Buffer | null = null;
+    let revisionType: string | null = null;
+    if (revision instanceof File && revision.size > 0) {
+      if (revision.size > 8 * 1024 * 1024 || !["image/jpeg", "image/png", "image/webp"].includes(revision.type)) {
+        return Response.json({ code: "INVALID_REVISION_IMAGE", message: "上一张结果需为 JPEG、PNG 或 WebP，且不超过 8MB", requestId }, { status: 400 });
+      }
+      revisionBytes = Buffer.from(await revision.arrayBuffer());
+      revisionType = revision.type;
+    }
 
     const job = await createGenerationJob({
       requestId,
       sceneBytes,
       identityBytes,
       identityType,
+      revisionBytes,
+      revisionType,
+      revisionPrompt: revisionPrompt || null,
       contentSummary: video.analysis.summary,
       location: video.location,
       outfitStyle: outfitStyle === "menswear" ? "menswear" : "womenswear",

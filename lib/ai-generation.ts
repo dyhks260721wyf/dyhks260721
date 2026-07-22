@@ -20,6 +20,9 @@ type GenerationInput = {
   sceneBytes: Buffer;
   identityBytes: Buffer | null;
   identityType: string | null;
+  revisionBytes: Buffer | null;
+  revisionType: string | null;
+  revisionPrompt: string | null;
   contentSummary: string;
   location: string;
   outfitStyle: string;
@@ -106,6 +109,35 @@ async function imageFromSeedreamResponse(response: Response) {
 }
 
 function promptFor(input: GenerationInput) {
+  if (input.revisionBytes && input.revisionPrompt) {
+    const identityReference = input.identityBytes
+      ? "Image 3 is the authorized identity reference. Preserve that adult person's recognizable face."
+      : "Keep the same recognizable adult identity already present in Image 1.";
+
+    return `GOAL
+Create one new photorealistic vertical fashion photograph by revising the current generated Look.
+
+REFERENCE ROLES
+- Image 1 is the current generated version and is authoritative for the person's identity, personalized body proportions, and the current complete outfit.
+- Image 2 is the original video frame and is a fallback reference for garment colors, materials, accessories, and overall Look continuity.
+- ${identityReference}
+
+USER'S EDIT REQUEST — HIGHEST PRIORITY FOR THE NEW VERSION
+${input.revisionPrompt}
+
+REVISION RULES
+- Apply the request visibly and decisively. A scene request must produce a recognizably different environment; a pose request must visibly change head direction, arms, torso, hips, and/or legs as appropriate.
+- Preserve the person's recognizable identity, target body shape (${input.bodyType}), target stature (${input.heightCm} cm, ${input.weightLabel}), and realistic anatomy.
+- Preserve the complete outfit by default. Only change clothing or accessories if the user explicitly asks for that change.
+- Keep garment fit and drape natural for ${input.statureInstruction}; ${input.bodyShapeInstruction}.
+- Recompose as a full-body or head-to-calf portrait unless the user explicitly asks for another crop.
+- Show exactly one adult with coherent lighting, ground contact, and shadow.
+- No text, logos, watermarks, duplicate people, extra limbs, or unintended garments.
+
+CONTEXT
+Original location: ${input.location}. Styling direction: ${input.outfitStyle}. Original content: ${input.contentSummary}.`;
+  }
+
   const identityInstruction = input.identityBytes
     ? "Image 2 is an authorized identity reference. Preserve that adult person's recognizable facial identity while replacing the model in Image 1."
     : "No separate identity image was supplied. Preserve the adult person visible in Image 1 while re-rendering the photograph.";
@@ -149,13 +181,20 @@ async function runGeneration(job: GenerationJob, input: GenerationInput) {
       return;
     }
 
-    await updateJob(job, { status: "processing", stage: "analyzing", message: "正在整理场景、形象与身体数据" });
-    const referenceImages = [imageDataUrl(input.sceneBytes, "image/jpeg")];
-    if (input.identityBytes && input.identityType) {
-      referenceImages.push(imageDataUrl(input.identityBytes, input.identityType));
-    }
+    await updateJob(job, {
+      status: "processing",
+      stage: "analyzing",
+      message: input.revisionBytes ? "正在理解你的修改需求" : "正在整理场景、形象与身体数据",
+    });
+    const referenceImages = input.revisionBytes && input.revisionType
+      ? [imageDataUrl(input.revisionBytes, input.revisionType), imageDataUrl(input.sceneBytes, "image/jpeg")]
+      : [imageDataUrl(input.sceneBytes, "image/jpeg")];
+    if (input.identityBytes && input.identityType) referenceImages.push(imageDataUrl(input.identityBytes, input.identityType));
 
-    await updateJob(job, { stage: "generating", message: "Seedream 5.0 Lite 正在生成个性化场景穿搭" });
+    await updateJob(job, {
+      stage: "generating",
+      message: input.revisionBytes ? "Seedream 正在按你的想法生成新版本" : "Seedream 5.0 Lite 正在生成个性化场景穿搭",
+    });
     const endpoint = process.env.IMAGE_API_BASE_URL ?? "https://ark.cn-beijing.volces.com/api/plan/v3/images/generations";
     const response = await fetch(endpoint, {
       method: "POST",
@@ -192,7 +231,7 @@ async function runGeneration(job: GenerationJob, input: GenerationInput) {
     await updateJob(job, {
       status: "completed",
       stage: "completed",
-      message: "AI 场景试穿已生成",
+      message: input.revisionBytes ? "新的 Look 版本已生成" : "AI 场景试穿已生成",
       resultMode: "seedream-generation",
     });
   } catch (error) {
