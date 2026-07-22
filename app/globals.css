@@ -176,7 +176,9 @@ img, video { display: block; }
 .generated-image-full { position: relative; z-index: 1; width: 100%; height: 100%; object-fit: contain; }
 .result-step { position: relative; height: calc(100% - 78px); overflow: hidden; background: #09090b; color: white; }
 .result-scroll { height: 100%; overflow-y: auto; padding-bottom: 112px; background: #09090b; scrollbar-width: none; overscroll-behavior: contain; }.result-scroll::-webkit-scrollbar { display: none; }
-.result-image-stage { width: 100%; height: clamp(390px, 70%, 570px); }
+.result-image-stage { width: 100%; height: auto; min-height: min(58svh, 500px); background: #09090b; }
+.result-image-stage .generated-image-backdrop { display: none; }
+.result-image-stage .generated-image-full { width: 100%; height: auto; object-fit: contain; }
 .result-panel { position: relative; z-index: 2; margin-top: -30px; padding: 17px 17px calc(22px + var(--safe-bottom)); border-radius: 22px 22px 0 0; background: #f5f5f1; color: #17171b; }
 
 /* AI try-on expansion */
