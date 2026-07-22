@@ -1222,7 +1222,6 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
         <header className="flow-header">
           <button type="button" onClick={canStepBack ? () => setStep(step - 1) : onClose} aria-label={canStepBack ? "返回" : "关闭"}>{canStepBack ? <ArrowLeft size={21} /> : <X size={21} />}</button>
           <div><h3>{stepTitle}</h3></div>
-          <div className="step-dots">{[0, 1, 2, 3].map((item) => <i key={item} className={item <= step ? "active" : ""} />)}</div>
         </header>
 
         {step === 0 && (
