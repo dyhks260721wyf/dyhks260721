@@ -568,7 +568,7 @@ function TryOnFlow({ video, entrySource, initialProfile, onClose, onSaveProfile,
   const cameraVideoRef = useRef<HTMLVideoElement>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const faceDirections = ["正视镜头", "缓慢向左转", "缓慢向右转", "轻轻抬头", "轻轻低头"];
-  const generationMessages = ["正在提交场景与授权人像", "Sol 正在识别场景与完整 Look", "Sol 已调用 image-2 生成画面", "正在完成最终渲染"];
+  const generationMessages = ["正在提交场景与授权人像", "正在整理场景、形象与身体数据", "Seedream 5.0 Lite 正在生成画面", "正在完成最终渲染"];
 
   useEffect(() => () => {
     cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -840,14 +840,14 @@ function TryOnFlow({ video, entrySource, initialProfile, onClose, onSaveProfile,
             {error && <p className="form-error">{error}</p>}
             <button className="flow-primary generate-button" disabled={generating} type="submit">{generating ? <><span className="spinner" />正在融合场景与 Look</> : <><WandSparkles size={18} />生成我的场景 Look</>}</button>
             {generating && <div className="generation-progress" role="status" aria-live="polite"><div><Sparkles size={18} /><span><strong>{generationStatusMessage ?? generationMessages[generationStage]}</strong><small>生图耗时可能较长；未返回明确错误时会持续等待，请保持页面打开</small></span></div><div className="generation-track"><i style={{ width: `${(generationStage + 1) / generationMessages.length * 100}%` }} /></div></div>}
-            <small className="generation-note">场景与授权人像直接交给 gpt-5.6-sol，由 Sol 在同一请求中调用 image-2。</small>
+            <small className="generation-note">场景图、授权人像与身材数据将直接交给 Seedream 5.0 Lite 生成。</small>
           </form>
         )}
 
         {step === 3 && resultUrl && (
           <div className="result-step">
             <GeneratedImageStage className="result-image-stage" src={resultUrl} alt="生成的场景穿搭结果">
-              <div className="result-topline"><span><Sparkles size={14} /> {resultMode === "sol-image-generation" ? "Sol · AI 场景试穿" : "本地演示结果"}</span><small>{video.location}</small></div>
+              <div className="result-topline"><span><Sparkles size={14} /> {resultMode === "seedream-generation" ? "Seedream · AI 场景试穿" : "本地演示结果"}</span><small>{video.location}</small></div>
             </GeneratedImageStage>
             <div className="result-panel">
               <span className="result-emotion">这一刻，场景终于有了你的样子</span>

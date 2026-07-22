@@ -3,9 +3,10 @@ services:
     build: .
     restart: unless-stopped
     environment:
-      IMAGE_API_BASE_URL: ${IMAGE_API_BASE_URL:-https://api.8989886.xyz/v1}
+      IMAGE_API_BASE_URL: ${IMAGE_API_BASE_URL:-https://ark.cn-beijing.volces.com/api/plan/v3/images/generations}
       IMAGE_API_KEY: ${IMAGE_API_KEY:-}
-      VISION_ORCHESTRATOR_MODEL: ${VISION_ORCHESTRATOR_MODEL:-gpt-5.6-sol}
+      IMAGE_API_MODEL: ${IMAGE_API_MODEL:-doubao-seedream-5.0-lite}
+      IMAGE_API_SIZE: ${IMAGE_API_SIZE:-2K}
       AI_JOB_DIR: ${AI_JOB_DIR:-/tmp/scene-fit-ai-jobs}
     ports:
       - "127.0.0.1:3000:3000"

@@ -1,8 +1,5 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 
-const gatewayUserAgent =
-  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36";
-
 export type GenerationJobStatus = "queued" | "processing" | "completed" | "failed";
 
 export type GenerationJob = {
@@ -14,7 +11,7 @@ export type GenerationJob = {
   createdAt: string;
   updatedAt: string;
   expiresAt: string;
-  resultMode?: "sol-image-generation" | "local-fallback";
+  resultMode?: "seedream-generation" | "local-fallback";
   error?: { code: string; message: string; upstreamStatus?: number };
 };
 
@@ -78,69 +75,34 @@ function imageDataUrl(bytes: Buffer, mimeType: string) {
   return `data:${mimeType};base64,${bytes.toString("base64")}`;
 }
 
-function resultFromEvent(event: unknown): string | null {
-  if (!event || typeof event !== "object") return null;
-  const value = event as {
-    item?: { type?: string; result?: unknown };
-    response?: { output?: Array<{ type?: string; result?: unknown }> };
-  };
-  if (value.item?.type === "image_generation_call" && typeof value.item.result === "string") return value.item.result;
-  const imageOutput = value.response?.output?.find((item) => item.type === "image_generation_call" && typeof item.result === "string");
-  return typeof imageOutput?.result === "string" ? imageOutput.result : null;
-}
-
 function decodeImageResult(base64: string) {
   const normalized = base64.includes(",") ? base64.slice(base64.indexOf(",") + 1) : base64;
   if (normalized.length < 1_000 || normalized.length > 30_000_000) throw new GenerationFailure("INVALID_IMAGE_RESULT", "生图服务返回了无效图片");
   const bytes = Buffer.from(normalized, "base64");
-  if (bytes.length < 1_000 || bytes[0] !== 0xff || bytes[1] !== 0xd8) {
-    throw new GenerationFailure("INVALID_IMAGE_RESULT", "生图服务没有返回有效的 JPEG 图片");
-  }
+  const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8;
+  const isPng = bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  const isWebp = bytes.subarray(0, 4).toString("ascii") === "RIFF" && bytes.subarray(8, 12).toString("ascii") === "WEBP";
+  if (bytes.length < 1_000 || (!isJpeg && !isPng && !isWebp)) throw new GenerationFailure("INVALID_IMAGE_RESULT", "生图服务没有返回有效图片");
   return bytes;
 }
 
-async function consumeSolStream(response: Response, job: GenerationJob) {
-  if (!response.body) throw new GenerationFailure("EMPTY_UPSTREAM_STREAM", "生图服务没有返回数据", response.status);
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let pending = "";
-  let finalResult: string | null = null;
-  let currentStage = job.stage;
-
-  const processLine = async (line: string) => {
-    if (!line.startsWith("data: ") || line === "data: [DONE]") return;
-    let event: { type?: string; error?: { message?: string } };
-    try {
-      event = JSON.parse(line.slice(6)) as typeof event;
-    } catch {
-      return;
-    }
-
-    const result = resultFromEvent(event);
-    if (result) finalResult = result;
-
-    if (event.type === "response.image_generation_call.in_progress" && currentStage !== "generating") {
-      currentStage = "generating";
-      await updateJob(job, { stage: "generating", message: "Sol 已调用 image-2，正在生成画面" });
-    } else if (event.type === "response.image_generation_call.partial_image" && currentStage !== "rendering") {
-      currentStage = "rendering";
-      await updateJob(job, { stage: "rendering", message: "画面已生成，正在完成最终渲染" });
-    } else if (event.type === "response.failed" || event.type === "error") {
-      throw new GenerationFailure("UPSTREAM_GENERATION_FAILED", event.error?.message ?? "生图服务返回失败");
-    }
-  };
-
-  while (true) {
-    const { value, done } = await reader.read();
-    pending += decoder.decode(value, { stream: !done });
-    const lines = pending.split("\n");
-    pending = lines.pop() ?? "";
-    for (const line of lines) await processLine(line.trimEnd());
-    if (done) break;
+async function imageFromSeedreamResponse(response: Response) {
+  const payload = await response.json().catch(() => null) as {
+    data?: Array<{ b64_json?: unknown; url?: unknown }>;
+    error?: { message?: unknown };
+    message?: unknown;
+  } | null;
+  const first = payload?.data?.[0];
+  if (typeof first?.b64_json === "string") return decodeImageResult(first.b64_json);
+  if (typeof first?.url === "string") {
+    const imageResponse = await fetch(first.url);
+    if (!imageResponse.ok) throw new GenerationFailure("IMAGE_DOWNLOAD_FAILED", "生成图片下载失败", imageResponse.status);
+    return decodeImageResult(Buffer.from(await imageResponse.arrayBuffer()).toString("base64"));
   }
-  if (pending) await processLine(pending.trimEnd());
-  if (!finalResult) throw new GenerationFailure("EMPTY_IMAGE_RESULT", "Sol 已结束处理，但没有返回生成图片");
-  return decodeImageResult(finalResult);
+  const upstreamMessage = typeof payload?.error?.message === "string"
+    ? payload.error.message
+    : typeof payload?.message === "string" ? payload.message : undefined;
+  throw new GenerationFailure("EMPTY_IMAGE_RESULT", upstreamMessage ?? "Seedream 已结束处理，但没有返回生成图片");
 }
 
 function promptFor(input: GenerationInput) {
@@ -149,7 +111,7 @@ function promptFor(input: GenerationInput) {
     : "No separate identity image was supplied. Preserve the adult person visible in Image 1 while re-rendering the photograph.";
 
   return `GOAL
-Create one personalized, photorealistic vertical fashion photograph. Analyze all supplied images, then invoke the built-in image_generation tool backed specifically by gpt-image-2. Wait for the tool and return its final image; do not merely return instructions.
+Create one personalized, photorealistic vertical fashion photograph from the supplied reference images.
 
 REFERENCE ROLES
 - Image 1 is authoritative for the location, background identity, complete garment inventory, garment colors and materials, accessories, and lighting atmosphere.
@@ -187,51 +149,51 @@ async function runGeneration(job: GenerationJob, input: GenerationInput) {
       return;
     }
 
-    await updateJob(job, { status: "processing", stage: "analyzing", message: "正在把场景与授权人像交给 Sol 分析" });
-    const content: Array<Record<string, unknown>> = [
-      { type: "input_text", text: promptFor(input) },
-      { type: "input_image", image_url: imageDataUrl(input.sceneBytes, "image/jpeg"), detail: "high" },
-    ];
+    await updateJob(job, { status: "processing", stage: "analyzing", message: "正在整理场景、形象与身体数据" });
+    const referenceImages = [imageDataUrl(input.sceneBytes, "image/jpeg")];
     if (input.identityBytes && input.identityType) {
-      content.push({ type: "input_image", image_url: imageDataUrl(input.identityBytes, input.identityType), detail: "high" });
+      referenceImages.push(imageDataUrl(input.identityBytes, input.identityType));
     }
 
-    const baseUrl = (process.env.IMAGE_API_BASE_URL ?? "https://api.8989886.xyz/v1").replace(/\/$/, "");
-    const response = await fetch(`${baseUrl}/responses`, {
+    await updateJob(job, { stage: "generating", message: "Seedream 5.0 Lite 正在生成个性化场景穿搭" });
+    const endpoint = process.env.IMAGE_API_BASE_URL ?? "https://ark.cn-beijing.volces.com/api/plan/v3/images/generations";
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${process.env.IMAGE_API_KEY}`,
         "Content-Type": "application/json",
-        "User-Agent": gatewayUserAgent,
       },
       body: JSON.stringify({
-        model: process.env.VISION_ORCHESTRATOR_MODEL ?? "gpt-5.6-sol",
-        input: [{ role: "user", content }],
-        tools: [{
-          type: "image_generation",
-          quality: "medium",
-          size: "1024x1536",
-          output_format: "jpeg",
-          output_compression: 85,
-        }],
-        stream: true,
+        model: process.env.IMAGE_API_MODEL ?? "doubao-seedream-5.0-lite",
+        prompt: promptFor(input),
+        image: referenceImages,
+        size: process.env.IMAGE_API_SIZE ?? "2K",
+        sequential_image_generation: "disabled",
+        stream: false,
+        response_format: "b64_json",
+        watermark: false,
       }),
     });
 
     if (!response.ok) {
       const detail = (await response.text()).slice(0, 500);
-      console.error("Sol upstream request failed", { requestId: input.requestId, status: response.status, detail });
-      const message = response.status === 429 ? "生成请求较多，请稍后重试" : `生图服务返回错误（${response.status}）`;
-      throw new GenerationFailure(response.status === 429 ? "RATE_LIMITED" : "UPSTREAM_ERROR", message, response.status);
+      console.error("Seedream upstream request failed", { requestId: input.requestId, status: response.status, detail });
+      const authenticationFailed = response.status === 401 || response.status === 403;
+      const message = authenticationFailed
+        ? "生图服务鉴权失败，请联系管理员检查配置"
+        : response.status === 429 ? "生成请求较多，请稍后重试" : `生图服务返回错误（${response.status}）`;
+      const code = authenticationFailed ? "UPSTREAM_AUTH_FAILED" : response.status === 429 ? "RATE_LIMITED" : "UPSTREAM_ERROR";
+      throw new GenerationFailure(code, message, response.status);
     }
 
-    const result = await consumeSolStream(response, job);
+    await updateJob(job, { stage: "rendering", message: "Seedream 已生成画面，正在保存最终结果" });
+    const result = await imageFromSeedreamResponse(response);
     await writeFile(resultFile(job.id), result, { mode: 0o600 });
     await updateJob(job, {
       status: "completed",
       stage: "completed",
       message: "AI 场景试穿已生成",
-      resultMode: "sol-image-generation",
+      resultMode: "seedream-generation",
     });
   } catch (error) {
     const failure = error instanceof GenerationFailure

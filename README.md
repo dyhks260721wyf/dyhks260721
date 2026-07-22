@@ -16,7 +16,7 @@
 - 消息页与五栏主导航，完成首页、商城、发布、消息、个人页之间的完整切换。
 - `GET /api/content` 内容接口。
 - `POST /api/generate` 创建异步生图任务；`GET /api/generate/:jobId` 查询状态并获取结果。
-- 配置第三方兼容网关密钥时真实调用 GPT Image 2；未配置时返回本地演示结果。
+- 配置火山方舟密钥时真实调用 Seedream 5.0 Lite；未配置时返回本地演示结果。
 - Docker standalone 构建配置。
 
 ## 本地运行
@@ -29,18 +29,19 @@ npm run dev
 
 访问 <http://localhost:3000>。桌面端会展示移动设备画框，手机端自动全屏。
 
-## 兼容网关生图
+## Seedream 生图
 
 在 `.env.local` 中配置：
 
 ```bash
-IMAGE_API_BASE_URL=https://api.8989886.xyz/v1
+IMAGE_API_BASE_URL=https://ark.cn-beijing.volces.com/api/plan/v3/images/generations
 IMAGE_API_KEY=your_key
-VISION_ORCHESTRATOR_MODEL=gpt-5.6-sol
+IMAGE_API_MODEL=doubao-seedream-5.0-lite
+IMAGE_API_SIZE=2K
 AI_JOB_DIR=/tmp/scene-fit-ai-jobs
 ```
 
-前端不会接触 API Key。服务端通过 `baseURL` 只访问第三方网关，把场景图和授权人像直接交给 `gpt-5.6-sol`；提示词要求 Sol 在同一个 Responses 请求中调用内置 `image_generation` 工具（由 `gpt-image-2` 执行），后端不再单独请求 Images API。身高、体重和体型会转换为明确的纵向比例及肩腰胯关系，用户选择的动作氛围会重新编排头部、手臂、躯干、重心与腿部位置，不复刻原视频姿势。上游使用流式响应并接收 keepalive，不设置人为生图截止时间；H5 通过任务状态轮询等待结果，因此不会被浏览器长连接超时截断。只有上游明确返回失败时任务才结束，且不会用原图伪装成生成成功。未配置 Key 时仍提供明确标记的本地演示结果。
+前端不会接触 API Key。服务端把场景图和授权人像作为多参考图直接提交给 Seedream 5.0 Lite，并关闭组图模式，只生成一张 2K 结果图。身高、体重和体型会转换为明确的纵向比例及肩腰胯关系，用户选择的动作氛围会重新编排头部、手臂、躯干、重心与腿部位置，不复刻原视频姿势。H5 通过异步任务状态轮询等待结果，不设置人为生图截止时间；只有上游明确返回失败时任务才结束，且不会用原图伪装成生成成功。未配置 Key 时仍提供明确标记的本地演示结果。
 
 ## 参考项目
 
