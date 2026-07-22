@@ -11,7 +11,6 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
-  Grid2X2,
   Heart,
   Home,
   Image as ImageIcon,
@@ -323,7 +322,7 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
             {screen === "friends" && <FriendsScreen videos={feedVideos} onJumpOriginal={jumpToOriginal} />}
             {screen === "messages" && <MessagesScreen />}
             {screen === "assets" && (activeAsset
-              ? <AssetDetailScreen asset={activeAsset} onBack={() => setActiveAsset(null)} onPublish={() => changeScreen("publish")} onJumpOriginal={() => jumpToOriginal(activeAsset.video.id)} onOpenProduct={setSelectedProduct} />
+              ? <AssetDetailScreen asset={activeAsset} onBack={() => setActiveAsset(null)} onPublish={() => changeScreen("publish")} onJumpOriginal={() => jumpToOriginal(activeAsset.video.id)} />
               : <AssetLibraryScreen assets={assets} videos={feedVideos} saved={saved} onOpenAsset={setActiveAsset} onJumpOriginal={jumpToOriginal} />)}
             {screen === "publish" && <PublishScreen asset={publishAsset} onBack={() => changeScreen("assets")} onJumpOriginal={() => jumpToOriginal(publishAsset.video.id)} onOpenProduct={setSelectedProduct} />}
           </div>
@@ -1574,20 +1573,17 @@ function AssetLibraryScreen({ assets, videos, saved, onOpenAsset, onJumpOriginal
   );
 }
 
-function AssetDetailScreen({ asset, onBack, onPublish, onJumpOriginal, onOpenProduct }: { asset: GeneratedAsset; onBack: () => void; onPublish: () => void; onJumpOriginal: () => void; onOpenProduct: (product: ProductPreset) => void }) {
+function AssetDetailScreen({ asset, onBack, onPublish, onJumpOriginal }: { asset: GeneratedAsset; onBack: () => void; onPublish: () => void; onJumpOriginal: () => void }) {
   return (
     <section className="app-screen asset-detail-screen">
-      <header className="floating-screen-header"><button type="button" onClick={onBack} aria-label="返回"><ArrowLeft size={21} /></button><span>AIGC 图片资产</span><button type="button" aria-label="更多"><MoreHorizontal size={21} /></button></header>
-      <GeneratedImageStage className="asset-detail-image" src={asset.imageUrl} alt={asset.description} />
-      <div className="asset-detail-content">
-        <span className="asset-badge"><Sparkles size={13} />AI 场景穿搭 · {asset.createdAt}</span>
-        <h2>这张照片，已经属于你的场景。</h2>
-        <p>{asset.description}</p>
-        <div className="asset-main-actions"><button type="button" onClick={onPublish}><Sparkles size={17} />一键发布</button><button type="button" onClick={onJumpOriginal}><Music2 size={17} />跳转原视频</button></div>
-        <div className="source-row"><img src={asset.video.posterUrl} alt="原视频" /><div><span>原视频 / 原声</span><strong>{asset.video.location}</strong><small>{asset.video.audio}</small></div><ChevronRight size={18} /></div>
-        <div className="section-heading"><div><span>SHOP THE LOOK</span><strong>同款商品</strong></div><Grid2X2 size={18} /></div>
-        <div className="screen-product-grid compact">{asset.video.products.map((product) => <ProductCard key={product.id} product={product} onOpen={() => onOpenProduct(product)} />)}</div>
+      <div className="asset-detail-visual">
+        <GeneratedImageStage className="asset-detail-fullscreen" src={asset.imageUrl} alt={asset.description} />
+        <button className="asset-detail-back" type="button" onClick={onBack} aria-label="返回"><ArrowLeft size={23} /></button>
+        <button className="asset-audio-disc" type="button" onClick={onJumpOriginal} aria-label={`播放原声：${asset.video.audio}`}>
+          <span><img src={asset.video.posterUrl} alt="" /></span><i><Music2 size={13} /></i>
+        </button>
       </div>
+      <div className="asset-detail-actions"><button type="button" onClick={onPublish}><Sparkles size={18} />一键发布</button><button type="button" onClick={onJumpOriginal}><Play size={17} />跳转原视频</button></div>
     </section>
   );
 }
