@@ -11,7 +11,6 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
-  Download,
   Grid2X2,
   Heart,
   Home,
@@ -24,7 +23,6 @@ import {
   Pause,
   Play,
   Plus,
-  RotateCcw,
   Search,
   Send,
   ShieldCheck,
@@ -355,7 +353,6 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
             onSaveAsset={saveAsset}
             onOpenProduct={setSelectedProduct}
             onPublish={(asset) => { saveAsset(asset); setTryOnMinimized(false); setTryOn((value) => ({ ...value, open: false })); setScreen("publish"); }}
-            onJumpOriginal={() => jumpToOriginal(tryOnVideo.id)}
           />
         )}
 
@@ -942,7 +939,7 @@ function IntroOverlay({ onStart }: { onStart: () => void }) {
   );
 }
 
-function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onClose, onMinimizedChange, onSaveProfile, onSaveAsset, onOpenProduct, onPublish, onJumpOriginal }: {
+function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onClose, onMinimizedChange, onSaveProfile, onSaveAsset, onOpenProduct, onPublish }: {
   video: VideoPreset;
   entrySource: EntrySource;
   sceneFrameDataUrl: string | null;
@@ -953,7 +950,6 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
   onSaveAsset: (asset: GeneratedAsset) => void;
   onOpenProduct: (product: ProductPreset) => void;
   onPublish: (asset: GeneratedAsset) => void;
-  onJumpOriginal: () => void;
 }) {
   const hasSavedIdentity = Boolean(initialProfile?.identityDataUrl);
   const [step, setStep] = useState(hasSavedIdentity ? 2 : 0);
@@ -1163,14 +1159,6 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
     }
   }
 
-  function downloadResult() {
-    if (!activeVersion) return;
-    const anchor = document.createElement("a");
-    anchor.href = activeVersion.imageUrl;
-    anchor.download = `scene-fit-${video.id}-${activeVersion.id}.jpg`;
-    anchor.click();
-  }
-
   function buildAsset(version: LookVersion | null = activeVersion): GeneratedAsset | null {
     if (!version) return null;
     return {
@@ -1346,9 +1334,7 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
                 {generating && <div className="revision-image-progress" role="status"><span className="spinner" /><strong>{generationStatusMessage ?? generationMessages[generationStage]}</strong><small>正在保留当前图片，并生成新的效果</small><button className="revision-minimize" type="button" onClick={minimizeGeneration}><Minimize2 size={15} />收起，继续浏览</button></div>}
               </GeneratedImageStage>
               <div className="result-panel">
-                <button className={`save-result-block ${activeVersion.saved ? "saved" : ""}`} type="button" onClick={saveResult}><span>{activeVersion.saved ? <CheckCircle2 size={20} /> : <Bookmark size={20} />}<strong>{activeVersion.saved ? "这张已收藏到我的穿搭" : "收藏当前图片"}</strong></span><small>{activeVersion.saved ? "当前图片已保存，可继续生成新的效果" : "收藏后可在我的穿搭中查看和发布"}</small></button>
-                <div className="result-actions"><button type="button" onClick={downloadResult}><Download size={18} />保存本地</button><button type="button" onClick={() => setStep(2)}><RotateCcw size={18} />重新设定</button><button type="button" onClick={onClose}><Play size={18} />继续刷</button></div>
-                <div className="result-publish-row"><button type="button" onClick={publishResult}><Sparkles size={18} />一键发布</button><button type="button" onClick={onJumpOriginal}><Music2 size={17} />原视频 / 原声</button></div>
+                <button className={`result-primary-action ${activeVersion.saved ? "publish-ready" : ""}`} type="button" onClick={activeVersion.saved ? publishResult : saveResult}><span>{activeVersion.saved ? <Sparkles size={20} /> : <Bookmark size={20} />}<strong>{activeVersion.saved ? "发布为作品" : "收藏当前图片"}</strong></span><small>{activeVersion.saved ? "图片已添加到「我-收藏-我的穿搭」" : "收藏后可在我的穿搭中查看和发布"}</small></button>
                 <div className="result-products-heading"><strong>购买相似商品</strong><ShoppingCart size={20} /></div>
                 {activeProducts.length > 0
                   ? <div className="result-product-grid">{activeProducts.map((product) => <ProductCard key={product.id} product={product} onOpen={() => onOpenProduct(product)} />)}</div>
