@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { ProductPreset, VideoPreset } from "@/lib/content";
 
@@ -10,7 +10,7 @@ export type UserContentRecord = {
   createdAt: string;
 };
 
-function uploadsRoot() {
+export function userContentRoot() {
   return (process.env.USER_CONTENT_DIR ?? "/tmp/scene-fit-user-content").replace(/\/$/, "");
 }
 
@@ -20,7 +20,7 @@ function safeUploadId(uploadId: string) {
 }
 
 function uploadDirectory(uploadId: string) {
-  return path.join(uploadsRoot(), safeUploadId(uploadId));
+  return path.join(userContentRoot(), safeUploadId(uploadId));
 }
 
 function cleanTitle(fileName: string) {
@@ -100,14 +100,21 @@ export async function readUserContent(uploadId: string) {
 }
 
 export async function listUserContent() {
-  await mkdir(uploadsRoot(), { recursive: true, mode: 0o700 });
-  const entries = await readdir(uploadsRoot(), { withFileTypes: true });
+  await mkdir(userContentRoot(), { recursive: true, mode: 0o700 });
+  const entries = await readdir(userContentRoot(), { withFileTypes: true });
   const records = await Promise.all(entries
     .filter((entry) => entry.isDirectory() && /^user-[0-9a-f-]{36}$/.test(entry.name))
     .map((entry) => readUserContent(entry.name)));
   return records
     .filter((record): record is UserContentRecord => Boolean(record))
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+}
+
+export async function deleteUserContent(uploadId: string) {
+  const record = await readUserContent(uploadId);
+  if (!record) return false;
+  await rm(uploadDirectory(uploadId), { recursive: true, force: false });
+  return true;
 }
 
 export async function updateUserContentProducts(uploadId: string, products: ProductPreset[]) {
