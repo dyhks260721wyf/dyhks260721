@@ -15,6 +15,7 @@ import {
   Home,
   Images,
   MessageCircle,
+  Minimize2,
   MoreHorizontal,
   Music2,
   Pause,
@@ -103,7 +104,8 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
   const [openSheet, setOpenSheet] = useState<OpenSheet>(null);
   const [selectedHotspot, setSelectedHotspot] = useState<HotspotPreset | null>(null);
   const [commentTab, setCommentTab] = useState<CommentTab>("comments");
-  const [tryOn, setTryOn] = useState<{ open: boolean; source: EntrySource }>({ open: false, source: "pause_tag" });
+  const [tryOn, setTryOn] = useState<{ open: boolean; source: EntrySource; videoId: string }>({ open: false, source: "pause_tag", videoId: initialVideos[0]?.id ?? "" });
+  const [tryOnMinimized, setTryOnMinimized] = useState(false);
   const [saved, setSaved] = useState<string[]>([]);
   const [screen, setScreen] = useState<AppScreen>("feed");
   const [assets, setAssets] = useState<GeneratedAsset[]>([]);
@@ -114,6 +116,7 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
   const feedRef = useRef<HTMLDivElement>(null);
 
   const activeVideo = initialVideos[activeIndex] ?? initialVideos[0];
+  const tryOnVideo = initialVideos.find((video) => video.id === tryOn.videoId) ?? activeVideo;
   const publishAsset = activeAsset ?? assets[0] ?? {
     id: `demo-${activeVideo.id}`,
     imageUrl: activeVideo.posterUrl,
@@ -189,7 +192,8 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
 
   function startTryOn(source: EntrySource) {
     setOpenSheet(null);
-    setTryOn({ open: true, source });
+    setTryOnMinimized(false);
+    setTryOn({ open: true, source, videoId: activeVideo.id });
   }
 
   function toggleSaved(videoId: string) {
@@ -199,7 +203,7 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
   function changeScreen(next: AppScreen) {
     setOpenSheet(null);
     setSelectedProduct(null);
-    setTryOn((value) => ({ ...value, open: false }));
+    if (!tryOnMinimized) setTryOn((value) => ({ ...value, open: false }));
     setScreen(next);
     setActiveAsset(null);
   }
@@ -215,6 +219,7 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
       setActiveIndex(index);
       setScreen("feed");
       setActiveAsset(null);
+      setTryOnMinimized(false);
       setTryOn((value) => ({ ...value, open: false }));
       requestAnimationFrame(() => feedRef.current?.scrollTo({ top: index * feedRef.current.clientHeight, behavior: "smooth" }));
     }
@@ -289,15 +294,16 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
 
         {tryOn.open && (
           <TryOnFlow
-            video={activeVideo}
+            video={tryOnVideo}
             entrySource={tryOn.source}
             initialProfile={userProfile}
-            onClose={() => setTryOn((value) => ({ ...value, open: false }))}
+            onClose={() => { setTryOnMinimized(false); setTryOn((value) => ({ ...value, open: false })); }}
+            onMinimizedChange={(minimized) => { setTryOnMinimized(minimized); if (minimized) { setPaused(false); setOpenSheet(null); } }}
             onSaveProfile={setUserProfile}
             onSaveAsset={saveAsset}
             onOpenProduct={setSelectedProduct}
-            onPublish={(asset) => { saveAsset(asset); setTryOn((value) => ({ ...value, open: false })); setScreen("publish"); }}
-            onJumpOriginal={() => jumpToOriginal(activeVideo.id)}
+            onPublish={(asset) => { saveAsset(asset); setTryOnMinimized(false); setTryOn((value) => ({ ...value, open: false })); setScreen("publish"); }}
+            onJumpOriginal={() => jumpToOriginal(tryOnVideo.id)}
           />
         )}
 
@@ -545,11 +551,12 @@ function IntroOverlay({ onStart }: { onStart: () => void }) {
   );
 }
 
-function TryOnFlow({ video, entrySource, initialProfile, onClose, onSaveProfile, onSaveAsset, onOpenProduct, onPublish, onJumpOriginal }: {
+function TryOnFlow({ video, entrySource, initialProfile, onClose, onMinimizedChange, onSaveProfile, onSaveAsset, onOpenProduct, onPublish, onJumpOriginal }: {
   video: VideoPreset;
   entrySource: EntrySource;
   initialProfile: UserTryOnProfile | null;
   onClose: () => void;
+  onMinimizedChange: (minimized: boolean) => void;
   onSaveProfile: (profile: UserTryOnProfile) => void;
   onSaveAsset: (asset: GeneratedAsset) => void;
   onOpenProduct: (product: ProductPreset) => void;
@@ -572,6 +579,7 @@ function TryOnFlow({ video, entrySource, initialProfile, onClose, onSaveProfile,
   const [activeVersionId, setActiveVersionId] = useState<string | null>(null);
   const [revisionPrompt, setRevisionPrompt] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [minimized, setMinimized] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [captureFrames, setCaptureFrames] = useState<string[]>([]);
   const cameraVideoRef = useRef<HTMLVideoElement>(null);
@@ -808,8 +816,33 @@ function TryOnFlow({ video, entrySource, initialProfile, onClose, onSaveProfile,
     if (asset) onPublish(asset);
   }
 
+  function minimizeGeneration() {
+    if (!generating) return;
+    setMinimized(true);
+    onMinimizedChange(true);
+  }
+
+  function restoreGeneration() {
+    setMinimized(false);
+    onMinimizedChange(false);
+  }
+
   const stepTitle = ["录入你的形象", "补充身材信息", "确认生成内容", "你的场景 Look"][step];
   const canStepBack = step > 0 && step < 3 && !(initialProfile && step === 2);
+  const floatingState = generating ? "working" : error ? "failed" : "complete";
+
+  if (minimized) {
+    return (
+      <button className={`generation-float ${floatingState}`} type="button" onClick={restoreGeneration} aria-live="polite" aria-label={floatingState === "working" ? "场景 Look 正在生成，点击查看" : floatingState === "complete" ? "场景 Look 已生成，点击查看结果" : "场景 Look 生成失败，点击查看详情"}>
+        <span className="generation-float-visual"><img src={activeVersion?.imageUrl ?? video.posterUrl} alt="" /><i>{floatingState === "complete" ? <Check size={14} /> : floatingState === "failed" ? <X size={14} /> : <Sparkles size={13} />}</i></span>
+        <span className="generation-float-copy">
+          <strong>{floatingState === "working" ? "正在生成场景 Look" : floatingState === "complete" ? "你的新 Look 已生成" : "生成遇到问题"}</strong>
+          <small>{floatingState === "working" ? generationStatusMessage ?? generationMessages[generationStage] : floatingState === "complete" ? `${resultVersions.length} 张照片 · 点击查看` : `${error ?? "点击返回查看详情"}`}</small>
+        </span>
+        <ChevronRight size={17} />
+      </button>
+    );
+  }
 
   return (
     <div className="flow-layer">
@@ -895,7 +928,7 @@ function TryOnFlow({ video, entrySource, initialProfile, onClose, onSaveProfile,
             <label className="consent-row"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><i>{consent && <Check size={14} />}</i><span>我确认使用本人或已获授权的人像，并同意将图片发送至图像生成服务处理。</span></label>
             {error && <p className="form-error">{error}</p>}
             <button className="flow-primary generate-button" disabled={generating} type="submit">{generating ? <><span className="spinner" />正在融合场景与 Look</> : <><WandSparkles size={18} />生成我的场景 Look</>}</button>
-            {generating && <div className="generation-progress" role="status" aria-live="polite"><div><Sparkles size={18} /><span><strong>{generationStatusMessage ?? generationMessages[generationStage]}</strong><small>生图耗时可能较长；未返回明确错误时会持续等待，请保持页面打开</small></span></div><div className="generation-track"><i style={{ width: `${(generationStage + 1) / generationMessages.length * 100}%` }} /></div></div>}
+            {generating && <div className="generation-progress" role="status" aria-live="polite"><div><Sparkles size={18} /><span><strong>{generationStatusMessage ?? generationMessages[generationStage]}</strong><small>生图耗时可能较长；未返回明确错误时会持续等待</small></span></div><div className="generation-track"><i style={{ width: `${(generationStage + 1) / generationMessages.length * 100}%` }} /></div><button className="minimize-generation" type="button" onClick={minimizeGeneration}><Minimize2 size={15} />收起，继续刷视频</button></div>}
             <small className="generation-note">场景图、授权人像与身材数据将直接交给 Seedream 5.0 Lite 生成。</small>
           </form>
         )}
@@ -904,7 +937,7 @@ function TryOnFlow({ video, entrySource, initialProfile, onClose, onSaveProfile,
           <div className="result-step">
             <GeneratedImageStage className="result-image-stage" src={activeVersion.imageUrl} alt={`生成的场景穿搭结果，第 ${resultVersions.findIndex((version) => version.id === activeVersion.id) + 1} 个版本`}>
               <div className="result-topline"><span><Sparkles size={14} /> {activeVersion.resultMode === "seedream-generation" ? "Seedream · AI 场景试穿" : "本地演示结果"}</span><small>{resultVersions.findIndex((version) => version.id === activeVersion.id) + 1} / {resultVersions.length}</small></div>
-              {generating && <div className="revision-image-progress" role="status"><span className="spinner" /><strong>{generationStatusMessage ?? generationMessages[generationStage]}</strong><small>正在保留当前版本，并生成一张新照片</small></div>}
+              {generating && <div className="revision-image-progress" role="status"><span className="spinner" /><strong>{generationStatusMessage ?? generationMessages[generationStage]}</strong><small>正在保留当前版本，并生成一张新照片</small><button className="revision-minimize" type="button" onClick={minimizeGeneration}><Minimize2 size={15} />收起，继续浏览</button></div>}
             </GeneratedImageStage>
             <div className="result-panel">
               <section className="revision-studio" aria-label="继续修改图片">
