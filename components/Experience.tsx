@@ -994,30 +994,9 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
     if (rail && resultVersions.length > 1) rail.scrollTo({ left: rail.scrollWidth, behavior: "smooth" });
   }, [resultVersions.length]);
 
-  async function chooseFile(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (file.size > 4 * 1024 * 1024) {
-      setError("图片不能超过 4MB");
-      return;
-    }
-    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-      setError("请选择 JPEG、PNG 或 WebP 图片");
-      return;
-    }
-    try {
-      setIdentityDataUrl(await normalizeIdentityFile(file));
-      setCaptureFrames([]);
-      setUseDemoIdentity(false);
-      setError(null);
-    } catch {
-      setError("这张照片无法读取，请换一张重试");
-    }
-  }
-
   async function startCamera() {
     if (!navigator.mediaDevices?.getUserMedia) {
-      setError("当前浏览器无法使用摄像头，请从相册选择照片");
+      setError("当前浏览器无法使用摄像头，可使用演示人物继续体验");
       return;
     }
     try {
@@ -1035,7 +1014,7 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
         }
       });
     } catch {
-      setError("没有获得摄像头权限，请允许访问或从相册选择照片");
+      setError("没有获得摄像头权限，请允许访问或使用演示人物继续体验");
     }
   }
 
@@ -1255,13 +1234,12 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
       <section className="try-flow">
         <header className="flow-header">
           <button type="button" onClick={canStepBack ? () => setStep(step - 1) : onClose} aria-label={canStepBack ? "返回" : "关闭"}>{canStepBack ? <ArrowLeft size={21} /> : <X size={21} />}</button>
-          <div><span>AI TRY-ON · {step + 1}/4</span><h3>{stepTitle}</h3></div>
+          <div><h3>{stepTitle}</h3></div>
           <div className="step-dots">{[0, 1, 2, 3].map((item) => <i key={item} className={item <= step ? "active" : ""} />)}</div>
         </header>
 
         {step === 0 && (
           <div className="flow-body identity-step">
-            <div className="reference-strip"><img src={sceneReferenceUrl} alt="视频暂停帧参考" /><div><span>已锁定暂停帧与 Look</span><strong>{video.location}</strong><small>系统会以你刚才暂停的瞬间为参考</small></div><Check size={18} /></div>
             <div className={`face-capture-stage ${cameraActive ? "is-camera" : ""}`}>
               <div className="face-orbit" aria-label="人脸录入预览">
                 {cameraActive
@@ -1281,7 +1259,6 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
             </div>
             <div className="capture-actions">
               <button type="button" onClick={startCamera}><Camera size={17} />{cameraActive ? "重新录入" : "动态录入"}</button>
-              <label><Upload size={17} />从相册选择<input type="file" accept="image/jpeg,image/png,image/webp" onChange={chooseFile} /></label>
             </div>
             <button className={`demo-identity-toggle ${useDemoIdentity ? "active" : ""}`} type="button" onClick={() => { stopCamera(); setUseDemoIdentity(true); setError(null); }}><CheckCircle2 size={16} />暂不录入，使用演示人物</button>
             <div className="privacy-note"><ShieldCheck size={17} /><p>仅上传本人或已获授权的人像；图片用于本次生成与个人 AIGC 相册，不用于身份识别。</p></div>
@@ -1324,13 +1301,7 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
 
         {step === 2 && (
           <form className="flow-body confirm-step" onSubmit={generate}>
-            <div className="reference-cards">
-              <article><img src={sceneReferenceUrl} alt="暂停帧场景" /><span>01 / 暂停帧</span><strong>{video.location}</strong></article>
-              <article><img src={sceneReferenceUrl} alt="暂停帧完整 Look" /><span>02 / LOOK</span><strong>{video.userUploaded ? "Luna 将识别画面穿搭" : `${video.products.length} 件完整穿搭`}</strong></article>
-              <article><img src={useDemoIdentity ? video.posterUrl : identityDataUrl ?? video.posterUrl} alt="人物" /><span>03 / 人物</span><strong>{useDemoIdentity ? "演示人物" : "我的形象"}</strong></article>
-            </div>
-            {initialProfile && <div className="profile-reuse-note"><CheckCircle2 size={18} /><div><strong>已使用你上次保存的形象</strong><span>以后从三个入口进入，都可以直接生成</span></div><button type="button" onClick={() => setStep(0)}>修改</button></div>}
-            <div className="profile-summary"><span>{outfitStyle === "womenswear" ? "女士穿搭" : "男士穿搭"}</span><span>{bodyType === "hourglass" ? "沙漏型" : bodyType === "triangle" ? "倒三角" : bodyType === "pear" ? "梨型" : "直筒型"}</span><span>{heightCm} cm</span><span>{weightRange.replace("_", "–")} kg</span><span>{poseOptions.find((item) => item.value === poseStyle)?.label}</span></div>
+            {initialProfile && <div className="profile-reuse-note"><CheckCircle2 size={18} /><div><strong>已使用你上次保存的形象</strong></div><button type="button" onClick={() => setStep(0)}>修改</button></div>}
             <section className="generation-mode-section" aria-labelledby="generation-mode-title">
               <header><div><span>RENDER MODE</span><strong id="generation-mode-title">选择生成方式</strong></div><small>生成中可以收起继续刷</small></header>
               <div className="generation-mode-selector" role="radiogroup" aria-label="生成方式">
@@ -1512,22 +1483,6 @@ function loadDataUrlImage(dataUrl: string) {
     image.onerror = () => reject(new Error("IMAGE_LOAD_FAILED"));
     image.src = dataUrl;
   });
-}
-
-async function normalizeIdentityFile(file: File) {
-  const source = await blobToDataUrl(file);
-  const image = await loadDataUrlImage(source);
-  const maxEdge = 960;
-  const scale = Math.min(1, maxEdge / Math.max(image.naturalWidth, image.naturalHeight));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
-  canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
-  const context = canvas.getContext("2d");
-  if (!context) throw new Error("CANVAS_UNAVAILABLE");
-  context.fillStyle = "#ffffff";
-  context.fillRect(0, 0, canvas.width, canvas.height);
-  context.drawImage(image, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL("image/jpeg", 0.84);
 }
 
 async function combineIdentityFrames(frames: string[]) {
