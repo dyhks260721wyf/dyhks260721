@@ -15,7 +15,7 @@
 - 发布页支持文案编辑、原声关联、可见范围、保存相册、商品关联和发布成功反馈。
 - 消息页与五栏主导航，完成首页、商城、发布、消息、个人页之间的完整切换。
 - `GET /api/content` 内容接口。
-- `POST /api/generate` 服务端生图接口。
+- `POST /api/generate` 创建异步生图任务；`GET /api/generate/:jobId` 查询状态并获取结果。
 - 配置第三方兼容网关密钥时真实调用 GPT Image 2；未配置时返回本地演示结果。
 - Docker standalone 构建配置。
 
@@ -37,11 +37,10 @@ npm run dev
 IMAGE_API_BASE_URL=https://api.8989886.xyz/v1
 IMAGE_API_KEY=your_key
 VISION_ORCHESTRATOR_MODEL=gpt-5.6-sol
-IMAGE_API_MODEL=gpt-image-2
-IMAGE_API_FALLBACK=true
+AI_JOB_DIR=/tmp/scene-fit-ai-jobs
 ```
 
-前端不会接触 API Key。服务端使用兼容 SDK 并通过 `baseURL` 只访问第三方网关：`gpt-5.6-sol` 先读取场景图与授权人像，识别人物、完整穿搭、姿态、构图和光线，并强制调用受控的 `generate_image` 工具；服务端验证工具参数后，再调用 `gpt-image-2` Image Edits API。P0 输出为 512×768、低质量 JPEG；单次上游请求不自动重试。无 Key、网关超时或 5xx 时可以返回明确标记的本地演示结果，保证现场链路可继续。
+前端不会接触 API Key。服务端通过 `baseURL` 只访问第三方网关，把场景图和授权人像直接交给 `gpt-5.6-sol`；提示词要求 Sol 在同一个 Responses 请求中调用内置 `image_generation` 工具（由 `gpt-image-2` 执行），后端不再单独请求 Images API。上游使用流式响应并接收 keepalive，不设置人为生图截止时间；H5 通过任务状态轮询等待结果，因此不会被浏览器长连接超时截断。只有上游明确返回失败时任务才结束，且不会用原图伪装成生成成功。未配置 Key 时仍提供明确标记的本地演示结果。
 
 ## 参考项目
 

@@ -66,6 +66,17 @@ type GeneratedAsset = {
   createdAt: string;
 };
 
+type GenerationJobPayload = {
+  jobId: string;
+  status: "queued" | "processing" | "completed" | "failed";
+  stage?: "queued" | "analyzing" | "generating" | "rendering" | "completed" | "failed";
+  message?: string;
+  statusUrl?: string;
+  resultUrl?: string;
+  resultMode?: string;
+  error?: { message?: string };
+};
+
 const profileStorageKey = "scene-fit:user-profile:v1";
 const assetStorageKey = "scene-fit:generated-assets:v1";
 
@@ -526,6 +537,7 @@ function TryOnFlow({ video, entrySource, initialProfile, onClose, onSaveProfile,
   const [consent, setConsent] = useState(initialProfile?.consentAccepted ?? false);
   const [generating, setGenerating] = useState(false);
   const [generationStage, setGenerationStage] = useState(0);
+  const [generationStatusMessage, setGenerationStatusMessage] = useState<string | null>(null);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [resultMode, setResultMode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -535,13 +547,7 @@ function TryOnFlow({ video, entrySource, initialProfile, onClose, onSaveProfile,
   const cameraVideoRef = useRef<HTMLVideoElement>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const faceDirections = ["正视镜头", "缓慢向左转", "缓慢向右转", "轻轻抬头", "轻轻低头"];
-  const generationMessages = ["正在识别场景与完整 Look", "正在匹配你的形象与身材比例", "正在调用图像模型生成画面"];
-
-  useEffect(() => {
-    if (!generating) return;
-    const timer = window.setInterval(() => setGenerationStage((current) => Math.min(current + 1, generationMessages.length - 1)), 2600);
-    return () => window.clearInterval(timer);
-  }, [generating, generationMessages.length]);
+  const generationMessages = ["正在提交场景与授权人像", "Sol 正在识别场景与完整 Look", "Sol 已调用 image-2 生成画面", "正在完成最终渲染"];
 
   useEffect(() => () => {
     cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -625,6 +631,7 @@ function TryOnFlow({ video, entrySource, initialProfile, onClose, onSaveProfile,
     if (!consent) { setError("请确认你有权使用这张人像"); return; }
     setGenerating(true);
     setGenerationStage(0);
+    setGenerationStatusMessage(null);
     setError(null);
 
     try {
@@ -642,21 +649,48 @@ function TryOnFlow({ video, entrySource, initialProfile, onClose, onSaveProfile,
       form.set("videoId", video.id);
       form.set("heightCm", String(heightCm));
       form.set("weightRange", weightRange);
+      form.set("bodyType", bodyType);
       form.set("outfitStyle", outfitStyle);
       form.set("consentAccepted", "true");
       form.set("entrySource", entrySource);
       if (identityDataUrl && !useDemoIdentity) form.set("identityBoard", await dataUrlToFile(identityDataUrl, "identity-board.jpg"));
 
-      const response = await fetch("/api/generate", { method: "POST", body: form });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({ message: "生成没有完成" }));
-        throw new Error(payload.message ?? "生成没有完成");
+      const createResponse = await fetch("/api/generate", { method: "POST", body: form });
+      const created = await createResponse.json().catch(() => ({ message: "生成任务创建失败" })) as GenerationJobPayload & { message?: string };
+      if (!createResponse.ok || !created.jobId) throw new Error(created.message ?? "生成任务创建失败");
+
+      const statusUrl = created.statusUrl ?? `/api/generate/${created.jobId}`;
+      for (;;) {
+        let statusResponse: Response;
+        try {
+          statusResponse = await fetch(statusUrl, { cache: "no-store" });
+        } catch {
+          setGenerationStatusMessage("网络连接暂时中断，正在继续等待生成任务");
+          await waitForPoll();
+          continue;
+        }
+        const job = await statusResponse.json().catch(() => ({ message: "无法读取生成状态" })) as GenerationJobPayload & { message?: string };
+        if (!statusResponse.ok) throw new Error(job.message ?? "无法读取生成状态");
+
+        setGenerationStatusMessage(job.message ?? null);
+        const stageIndex = job.stage === "rendering" ? 3 : job.stage === "generating" ? 2 : job.stage === "analyzing" ? 1 : 0;
+        setGenerationStage(stageIndex);
+
+        if (job.status === "failed") throw new Error(job.error?.message ?? job.message ?? "生图服务返回失败");
+        if (job.status === "completed" && job.resultUrl) {
+          const resultResponse = await fetch(job.resultUrl, { cache: "no-store" });
+          if (!resultResponse.ok) {
+            const payload = await resultResponse.json().catch(() => ({ message: "生成图片暂时无法读取" }));
+            throw new Error(payload.message ?? "生成图片暂时无法读取");
+          }
+          const dataUrl = await blobToDataUrl(await resultResponse.blob());
+          setResultUrl(dataUrl);
+          setResultMode(job.resultMode ?? resultResponse.headers.get("X-Demo-Mode"));
+          setStep(3);
+          break;
+        }
+        await waitForPoll();
       }
-      const blob = await response.blob();
-      const dataUrl = await blobToDataUrl(blob);
-      setResultUrl(dataUrl);
-      setResultMode(response.headers.get("X-Demo-Mode"));
-      setStep(3);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "生成没有完成");
     } finally {
@@ -772,15 +806,15 @@ function TryOnFlow({ video, entrySource, initialProfile, onClose, onSaveProfile,
             <label className="consent-row"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><i>{consent && <Check size={14} />}</i><span>我确认使用本人或已获授权的人像，并同意将图片发送至图像生成服务处理。</span></label>
             {error && <p className="form-error">{error}</p>}
             <button className="flow-primary generate-button" disabled={generating} type="submit">{generating ? <><span className="spinner" />正在融合场景与 Look</> : <><WandSparkles size={18} />生成我的场景 Look</>}</button>
-            {generating && <div className="generation-progress" role="status" aria-live="polite"><div><Sparkles size={18} /><span><strong>{generationMessages[generationStage]}</strong><small>识图和生图可能需要约 1–2 分钟，请保持页面打开</small></span></div><div className="generation-track"><i style={{ width: `${(generationStage + 1) / generationMessages.length * 100}%` }} /></div></div>}
-            <small className="generation-note">后端先由 gpt-5.6-sol 识图并组织指令，再调用 image 模型完成画面。</small>
+            {generating && <div className="generation-progress" role="status" aria-live="polite"><div><Sparkles size={18} /><span><strong>{generationStatusMessage ?? generationMessages[generationStage]}</strong><small>生图耗时可能较长；未返回明确错误时会持续等待，请保持页面打开</small></span></div><div className="generation-track"><i style={{ width: `${(generationStage + 1) / generationMessages.length * 100}%` }} /></div></div>}
+            <small className="generation-note">场景与授权人像直接交给 gpt-5.6-sol，由 Sol 在同一请求中调用 image-2。</small>
           </form>
         )}
 
         {step === 3 && resultUrl && (
           <div className="result-step">
             <img className="result-image" src={resultUrl} alt="生成的场景穿搭结果" />
-            <div className="result-topline"><span><Sparkles size={14} /> {resultMode === "compatible-gateway" ? "AI 场景试穿" : resultMode === "gateway-fallback" ? "网关超时 · 演示结果" : "本地演示结果"}</span><small>{video.location}</small></div>
+            <div className="result-topline"><span><Sparkles size={14} /> {resultMode === "sol-image-generation" ? "Sol · AI 场景试穿" : "本地演示结果"}</span><small>{video.location}</small></div>
             <div className="result-panel">
               <span className="result-emotion">这一刻，场景终于有了你的样子</span>
               <h4>你已经在这个场景里了。</h4>
@@ -807,6 +841,10 @@ function blobToDataUrl(blob: Blob) {
     reader.onerror = () => reject(new Error("无法读取生成图片"));
     reader.readAsDataURL(blob);
   });
+}
+
+function waitForPoll() {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, 2_000));
 }
 
 async function dataUrlToFile(dataUrl: string, fileName: string) {
