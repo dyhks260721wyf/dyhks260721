@@ -4,7 +4,10 @@ import OpenAI, { toFile } from "openai";
 import { findVideo } from "@/lib/content";
 
 export const runtime = "nodejs";
-export const maxDuration = 180;
+export const maxDuration = 240;
+
+const gatewayUserAgent =
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36";
 
 const weightLabels: Record<string, string> = {
   under_50: "under 50 kg",
@@ -14,10 +17,31 @@ const weightLabels: Record<string, string> = {
   over_85: "over 85 kg",
 };
 
+type ImageToolArguments = {
+  prompt: string;
+  visual_analysis?: string;
+};
+
 function publicFile(assetUrl: string) {
   const safePath = assetUrl.replace(/^\/+/, "");
   if (!safePath.startsWith("media/images/")) throw new Error("INVALID_ASSET_PATH");
   return path.join(process.cwd(), "public", safePath);
+}
+
+function imageDataUrl(bytes: Buffer, mimeType: string) {
+  return `data:${mimeType};base64,${bytes.toString("base64")}`;
+}
+
+function parseImageToolArguments(rawArguments: string | undefined): ImageToolArguments {
+  if (!rawArguments) throw new Error("EMPTY_IMAGE_TOOL_CALL");
+  const parsed = JSON.parse(rawArguments) as Partial<ImageToolArguments>;
+  if (typeof parsed.prompt !== "string" || parsed.prompt.trim().length < 80 || parsed.prompt.length > 5_000) {
+    throw new Error("INVALID_IMAGE_TOOL_PROMPT");
+  }
+  return {
+    prompt: parsed.prompt.trim(),
+    visual_analysis: typeof parsed.visual_analysis === "string" ? parsed.visual_analysis.slice(0, 1_500) : undefined,
+  };
 }
 
 export async function POST(request: Request) {
@@ -70,31 +94,92 @@ export async function POST(request: Request) {
       identityType = identity.type;
     }
 
-    const imageClient = new OpenAI({
+    const gatewayClient = new OpenAI({
       apiKey: process.env.IMAGE_API_KEY,
       baseURL: process.env.IMAGE_API_BASE_URL ?? "https://api.8989886.xyz/v1",
-      timeout: 95_000,
+      timeout: 110_000,
       maxRetries: 0,
+      defaultHeaders: {
+        "User-Agent": gatewayUserAgent,
+      },
     });
     const imageInputs = [toFile(sceneBytes, "scene-and-look.jpg", { type: "image/jpeg" })];
     if (hasUploadedIdentity) imageInputs.push(toFile(identityBytes, "identity", { type: identityType }));
     const images = await Promise.all(imageInputs);
 
     const identityInstruction = hasUploadedIdentity
-      ? "Image 2 is the identity reference. Replace the model in Image 1 with the recognizable adult person from Image 2."
-      : "Preserve the recognizable adult person already shown in Image 1, but re-render the shot as a new polished fashion photograph.";
-    const prompt = `Create one photorealistic vertical fashion image.
-Image 1 is the authoritative background, composition, and complete outfit reference.
+      ? "Image 2 is an authorized identity reference. Preserve that adult person's recognizable facial identity while replacing the model in Image 1."
+      : "No separate identity image was supplied. Preserve the adult person visible in Image 1 while re-rendering the photograph.";
+    const orchestration = await gatewayClient.chat.completions.create({
+      model: process.env.VISION_ORCHESTRATOR_MODEL ?? "gpt-5.6-sol",
+      temperature: 0.2,
+      messages: [
+        {
+          role: "system",
+          content: `You are the vision director for an AI fashion try-on service.
+Analyze every supplied image before acting. Identify the visible adult, complete outfit, pose, camera framing, lighting, background, and scene atmosphere.
+You must call the generate_image tool exactly once. The tool prompt must be a production-ready English image-editing instruction that tells an image model what to preserve and what to change.
+Treat Image 1 as the authoritative scene, composition, and complete outfit reference. Never invent garments that are not visible. Preserve identity only from the authorized identity reference.
+Require exactly one adult person, natural anatomy, photorealism, and no text, logos, watermarks, duplicate people, extra limbs, or unrelated accessories.
+Do not answer with prose outside the tool call.`,
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `Prepare one vertical fashion image edit.
+Content context: ${video.analysis.summary}
+Location: ${video.location}
+Styling direction: ${outfitStyle === "menswear" ? "menswear" : "womenswear"}
+Approximate body proportions: ${heightCm} cm, ${weightLabels[weightRange]}.
 ${identityInstruction}
-Keep the full outfit and original scene atmosphere from Image 1.
-Use an approximate height of ${heightCm} cm and weight range ${weightLabels[weightRange]} for natural body proportions.
-The requested styling direction is ${outfitStyle === "menswear" ? "menswear" : "womenswear"}.
-Show exactly one adult person. Keep anatomy natural. Do not add text, logos, watermarks, extra garments, or unrelated accessories.`;
+The final tool prompt must explicitly preserve the full outfit, original scene atmosphere, lighting direction, and camera composition from Image 1.`,
+            },
+            { type: "image_url", image_url: { url: imageDataUrl(sceneBytes, "image/jpeg"), detail: "high" } },
+            ...(hasUploadedIdentity
+              ? [{ type: "image_url" as const, image_url: { url: imageDataUrl(identityBytes, identityType), detail: "high" as const } }]
+              : []),
+          ],
+        },
+      ],
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "generate_image",
+            description: "Generate the final try-on image using the supplied scene and identity references.",
+            parameters: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                visual_analysis: {
+                  type: "string",
+                  description: "A concise description of the recognized outfit, person, scene, pose, lighting, and composition.",
+                },
+                prompt: {
+                  type: "string",
+                  description: "A complete English image-editing prompt for the downstream image model.",
+                },
+              },
+              required: ["visual_analysis", "prompt"],
+            },
+          },
+        },
+      ],
+      tool_choice: { type: "function", function: { name: "generate_image" } },
+    });
 
-    const result = await imageClient.images.edit({
+    const toolCall = orchestration.choices[0]?.message.tool_calls?.find(
+      (call) => call.type === "function" && call.function.name === "generate_image",
+    );
+    if (!toolCall || toolCall.type !== "function") throw new Error("MISSING_IMAGE_TOOL_CALL");
+    const toolArguments = parseImageToolArguments(toolCall.function.arguments);
+
+    const result = await gatewayClient.images.edit({
       model: process.env.IMAGE_API_MODEL ?? "gpt-image-2",
       image: images,
-      prompt,
+      prompt: toolArguments.prompt,
       size: "512x768",
       quality: "low",
       output_format: "jpeg",
@@ -110,6 +195,8 @@ Show exactly one adult person. Keep anatomy natural. Do not add text, logos, wat
         "Cache-Control": "no-store",
         "X-Request-Id": requestId,
         "X-Demo-Mode": "compatible-gateway",
+        "X-Orchestrator-Model": process.env.VISION_ORCHESTRATOR_MODEL ?? "gpt-5.6-sol",
+        "X-Image-Model": process.env.IMAGE_API_MODEL ?? "gpt-image-2",
       },
     });
   } catch (error) {
