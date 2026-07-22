@@ -22,7 +22,6 @@ import {
   Play,
   Plus,
   RotateCcw,
-  ScanFace,
   Search,
   Send,
   ShieldCheck,
@@ -37,6 +36,7 @@ import {
   User,
   UserRound,
   Volume2,
+  VolumeX,
   WandSparkles,
   X,
   Zap,
@@ -45,8 +45,8 @@ import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import type { ProductPreset, VideoPreset } from "@/lib/content";
 
 type OpenSheet = "comments" | null;
-type EntrySource = "pause_tag" | "comment_tab" | "ai_analysis";
-type CommentTab = "comments" | "analysis" | "tryon";
+type EntrySource = "pause_tag" | "ai_analysis";
+type CommentTab = "comments" | "analysis";
 type AppScreen = "feed" | "friends" | "messages" | "assets" | "publish";
 type PoseStyle = "candid" | "walking" | "glance" | "editorial";
 type GenerationMode = "fast" | "refined";
@@ -112,6 +112,7 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
   const [feedVideos, setFeedVideos] = useState(initialVideos);
   const [activeIndex, setActiveIndex] = useState(0);
   const [paused, setPaused] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(false);
   const [openSheet, setOpenSheet] = useState<OpenSheet>(null);
   const [commentTab, setCommentTab] = useState<CommentTab>("comments");
   const [pausedFrame, setPausedFrame] = useState<{ videoId: string; dataUrl: string } | null>(null);
@@ -275,6 +276,8 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
               active={index === activeIndex}
               paused={index === activeIndex && (video.mediaType === "image" || paused)}
               saved={saved.includes(video.id)}
+              soundEnabled={soundEnabled}
+              onSoundChange={setSoundEnabled}
               onPause={(frameDataUrl) => { if (index !== activeIndex) return; rememberPausedFrame(frameDataUrl); setPaused(true); }}
               onResume={() => index === activeIndex && setPaused(false)}
               onComments={(frameDataUrl) => openComments("comments", frameDataUrl)}
@@ -409,6 +412,8 @@ function FeedSlide({
   active,
   paused,
   saved,
+  soundEnabled,
+  onSoundChange,
   onPause,
   onResume,
   onComments,
@@ -419,6 +424,8 @@ function FeedSlide({
   active: boolean;
   paused: boolean;
   saved: boolean;
+  soundEnabled: boolean;
+  onSoundChange: (enabled: boolean) => void;
   onPause: (frameDataUrl: string | null) => void;
   onResume: () => void;
   onComments: (frameDataUrl: string | null) => void;
@@ -433,13 +440,21 @@ function FeedSlide({
   useEffect(() => {
     const element = videoRef.current;
     if (!element) return;
+    element.muted = !soundEnabled;
+    element.volume = 1;
     if (active && !paused) {
-      void element.play().catch(() => undefined);
+      void element.play().catch(() => {
+        if (!element.muted) {
+          element.muted = true;
+          onSoundChange(false);
+          void element.play().catch(() => undefined);
+        }
+      });
     } else {
       element.pause();
     }
     if (!active) element.currentTime = 0;
-  }, [active, paused]);
+  }, [active, onSoundChange, paused, soundEnabled]);
 
   function togglePlayback() {
     if (isImage) return;
@@ -465,11 +480,28 @@ function FeedSlide({
     onComments(isImage ? captureImageFrame(imageRef.current) : element ? captureVideoFrame(element) : null);
   }
 
+  function toggleSound(event: React.MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation();
+    const element = videoRef.current;
+    if (!element || isImage) return;
+    const next = !soundEnabled;
+    element.muted = !next;
+    element.volume = 1;
+    onSoundChange(next);
+    if (next) {
+      if (paused) onResume();
+      void element.play().catch(() => {
+        element.muted = true;
+        onSoundChange(false);
+      });
+    }
+  }
+
   return (
     <article className={`feed-slide tone-${video.accent}`} onClick={togglePlayback}>
       {isImage
         ? <img ref={imageRef} className="feed-media" src={video.posterUrl} alt={video.title} />
-        : <video ref={videoRef} className="feed-media" src={video.videoUrl} poster={video.posterUrl} loop muted playsInline preload={active ? "auto" : "metadata"} />}
+        : <video ref={videoRef} className="feed-media" src={video.videoUrl} poster={video.posterUrl} loop muted={!soundEnabled} playsInline preload={active ? "auto" : "metadata"} />}
       <div className="media-shade" />
 
       {paused && (
@@ -488,7 +520,9 @@ function FeedSlide({
         <div className="location-chip">{video.location}</div>
         <h2>@{video.author}</h2>
         <p>{video.title}</p>
-        <div className="audio-line"><Volume2 size={14} /><span>{video.audio}</span></div>
+        {isImage
+          ? <div className="audio-line"><Volume2 size={14} /><span>{video.audio}</span></div>
+          : <button className={`audio-line sound-toggle ${soundEnabled ? "enabled" : "muted"}`} type="button" aria-pressed={soundEnabled} aria-label={soundEnabled ? "关闭视频声音" : "开启视频声音"} onClick={toggleSound}>{soundEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}<span>{soundEnabled ? video.audio : "开启声音 · 播放原声"}</span></button>}
       </div>
 
       <div className="action-rail" onClick={(event) => event.stopPropagation()}>
@@ -595,7 +629,6 @@ function CommentsSheet({ video, tab, onTabChange, onClose, onTryOn }: { video: V
         <div className="comment-tabs">
           <button className={tab === "comments" ? "active" : ""} type="button" onClick={() => onTabChange("comments")}>评论 <span>{video.counts.comments}</span></button>
           <button className={tab === "analysis" ? "active" : ""} type="button" onClick={() => onTabChange("analysis")}><Sparkles size={14} /> AI 解析</button>
-          <button className={tab === "tryon" ? "active" : ""} type="button" onClick={() => onTabChange("tryon")}><WandSparkles size={14} /> AI 试穿</button>
           <button className="comment-close" type="button" onClick={onClose} aria-label="关闭"><X size={20} /></button>
         </div>
 
@@ -609,7 +642,7 @@ function CommentsSheet({ video, tab, onTabChange, onClose, onTryOn }: { video: V
               </article>
             ))}
           </div>
-        ) : tab === "analysis" ? (
+        ) : (
           <div className="analysis-panel">
             <div className="analysis-heading"><span><Sparkles size={16} /> AI 内容摘要</span><small>内容由 AI 辅助生成，请结合实际判断</small></div>
             <p className="analysis-summary">{video.analysis.summary}</p>
@@ -625,17 +658,8 @@ function CommentsSheet({ video, tab, onTabChange, onClose, onTryOn }: { video: V
               ))}
             </div>
           </div>
-        ) : (
-          <div className="tryon-tab-panel">
-            <div className="tryon-tab-visual"><img src={video.posterUrl} alt="AI 上身场景预览" /><div className="tryon-tab-scan"><ScanFace size={27} /><span>人物形象</span></div><div className="tryon-tab-plus">+</div><div className="tryon-tab-look"><WandSparkles size={27} /><span>完整 Look</span></div></div>
-            <p className="eyebrow">AI TRY-ON</p>
-            <h3>把视频里的整套穿搭，<br />放进你的形象。</h3>
-            <p>录入清晰人像与身材信息，再选择你喜欢的动作。生成时保留原场景与整套 Look，重新塑造身体比例和姿势。</p>
-            <div className="tryon-tab-benefits"><span><ShieldCheck size={15} />人像授权确认</span><span><UserRound size={15} />体型与姿势个性化</span><span><Images size={15} />结果存入 AIGC 相册</span></div>
-            <button className="flow-primary" type="button" onClick={() => onTryOn("comment_tab")}><Camera size={18} />开始 AI 试穿</button>
-          </div>
         )}
-        {tab !== "tryon" && <div className="comment-input"><span>{tab === "analysis" ? "问 AI 或按住说话" : "留下你的评论"}</span><MoreHorizontal size={20} /><Send size={18} /></div>}
+        <div className="comment-input"><span>{tab === "analysis" ? "问 AI 或按住说话" : "留下你的评论"}</span><MoreHorizontal size={20} /><Send size={18} /></div>
       </section>
     </div>
   );
