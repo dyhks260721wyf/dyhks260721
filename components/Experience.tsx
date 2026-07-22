@@ -390,7 +390,7 @@ function UploadSlide({ active, uploadCount, onUploaded }: {
         {error && <p className="upload-error">{error}</p>}
         {!error && status && !uploading && <p className="upload-success"><CheckCircle2 size={15} />{status}</p>}
         <div className="upload-meta">
-          <span><ShieldCheck size={14} />仅用于本次内容体验</span>
+          <span><ShieldCheck size={14} />上传即加入项目内容流</span>
           <span><Images size={14} />已有 {uploadCount} 个我的场景</span>
         </div>
         <small>支持 MP4 / WebM / JPG / PNG / WebP · 最大 60MB</small>
