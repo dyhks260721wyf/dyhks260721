@@ -239,12 +239,12 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
     setPaused(false);
     setScreen("feed");
     setActiveIndex(nextIndex);
-    requestAnimationFrame(() => feedRef.current?.scrollTo({ top: nextIndex * feedRef.current.clientHeight, behavior: "smooth" }));
+    requestAnimationFrame(() => feedRef.current?.scrollTo({ top: nextIndex * feedRef.current.clientHeight, behavior: "auto" }));
   }
 
   function cycleToFirstVideo() {
     setActiveIndex(0);
-    requestAnimationFrame(() => feedRef.current?.scrollTo({ top: 0, behavior: "smooth" }));
+    requestAnimationFrame(() => feedRef.current?.scrollTo({ top: 0, behavior: "auto" }));
   }
 
   function jumpToOriginal(videoId: string) {
