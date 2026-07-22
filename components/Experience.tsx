@@ -3,6 +3,7 @@
 import {
   AlertCircle,
   ArrowLeft,
+  AtSign,
   Bell,
   Bookmark,
   Camera,
@@ -30,6 +31,7 @@ import {
   Share2,
   ShoppingBag,
   ShoppingCart,
+  Smile,
   Sparkles,
   Star,
   Store,
@@ -769,9 +771,9 @@ function FeedSlide({
       {!isImage && paused && <div className="pause-glyph"><Play size={34} fill="currentColor" /></div>}
 
       <div className="feed-copy">
-        <div className="location-chip">{video.location}</div>
         <h2>@{video.author}</h2>
         <p>{video.title}</p>
+        <div className="location-chip">{video.location}</div>
         {isImage
           ? <div className="audio-line"><Volume2 size={14} /><span>{video.audio}</span></div>
           : <button className={`audio-line sound-toggle ${soundEnabled ? "enabled" : "muted"}`} type="button" aria-pressed={soundEnabled} aria-label={soundEnabled ? "关闭视频声音" : "开启视频声音"} onClick={toggleSound}>{soundEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}<span>{soundEnabled ? video.audio : "开启声音 · 播放原声"}</span></button>}
@@ -828,7 +830,7 @@ function RailAction({ children, label, active = false, onClick }: { children: Re
 
 function BottomNavigation({ active, onChange }: { active: AppScreen; onChange: (screen: AppScreen) => void }) {
   return (
-    <nav className="bottom-nav" aria-label="主导航">
+    <nav className={`bottom-nav ${active === "feed" ? "dark" : "light"}`} aria-label="主导航">
       <button className={active === "feed" ? "active" : ""} type="button" aria-current={active === "feed" ? "page" : undefined} onClick={() => onChange("feed")}><Home size={18} /><span>首页</span></button>
       <button className={active === "friends" ? "active" : ""} type="button" aria-current={active === "friends" ? "page" : undefined} onClick={() => onChange("friends")}><UserRound size={18} /><span>朋友</span></button>
       <button className={`publish-button ${active === "publish" ? "active" : ""}`} type="button" aria-label="发布" aria-current={active === "publish" ? "page" : undefined} onClick={() => onChange("publish")}><span><Plus size={20} /></span></button>
@@ -869,28 +871,33 @@ function ProductCard({ product, onOpen }: { product: ProductPreset; onOpen?: () 
 function CommentsSheet({ video, tab, onTabChange, onClose, onTryOn }: { video: VideoPreset; tab: CommentTab; onTabChange: (tab: CommentTab) => void; onClose: () => void; onTryOn: (source: EntrySource) => void }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const comments = [
-    ["山茶", "这个配色和背景太贴了，像从湖里取的颜色。", "18分钟前"],
-    ["Rin", "想看小个子版本，外套长度是关键。", "1小时前"],
-    ["北纬三十七", "手套这一点酒红真的很妙。", "2小时前"],
+    ["山茶", "这个配色和背景太贴了，像从湖里取的颜色。", "18分钟前", "5570"],
+    ["Rin", "想看小个子版本，外套长度是关键。", "1小时前", "193"],
+    ["北纬三十七", "手套这一点酒红真的很妙。", "2小时前", "28"],
   ];
 
   return (
     <div className="sheet-layer" onClick={onClose}>
       <section className="bottom-sheet comments-sheet" onClick={(event) => event.stopPropagation()}>
         <div className="sheet-grabber" />
+        <div className="comment-context">
+          <img src={video.posterUrl} alt="" />
+          <div><span>大家都在搜</span><strong>{video.analysis.tags[0]}穿搭</strong></div>
+          <Search size={18} />
+          <button className="comment-close" type="button" onClick={onClose} aria-label="关闭"><X size={20} /></button>
+        </div>
         <div className="comment-tabs">
           <button className={tab === "comments" ? "active" : ""} type="button" onClick={() => onTabChange("comments")}>评论 <span>{video.counts.comments}</span></button>
           <button className={tab === "analysis" ? "active" : ""} type="button" onClick={() => onTabChange("analysis")}><Sparkles size={14} /> AI 解析</button>
-          <button className="comment-close" type="button" onClick={onClose} aria-label="关闭"><X size={20} /></button>
         </div>
 
         {tab === "comments" ? (
           <div className="comment-list">
-            {comments.map(([name, text, time], index) => (
+            {comments.map(([name, text, time, likes], index) => (
               <article className="comment-item" key={name}>
                 <div className={`comment-avatar avatar-${index}`}>{name.slice(0, 1)}</div>
                 <div><strong>{name}</strong><p>{text}</p><span>{time} · 回复</span></div>
-                <Heart size={17} />
+                <div className="comment-like"><Heart size={18} /><span>{likes}</span></div>
               </article>
             ))}
           </div>
@@ -911,7 +918,7 @@ function CommentsSheet({ video, tab, onTabChange, onClose, onTryOn }: { video: V
             </div>
           </div>
         )}
-        <div className="comment-input"><span>{tab === "analysis" ? "问 AI 或按住说话" : "留下你的评论"}</span><MoreHorizontal size={20} /><Send size={18} /></div>
+        <div className="comment-input"><span>{tab === "analysis" ? "问 AI 或按住说话" : "留下你的评论"}</span><ImageIcon size={20} /><AtSign size={20} /><Smile size={20} /></div>
       </section>
     </div>
   );
@@ -1592,8 +1599,7 @@ function AssetLibraryScreen({ assets, videos, saved, onOpenAsset, onJumpOriginal
     <section className="app-screen asset-screen">
       <div className="profile-hero"><img src="/media/images/nalati-blue-dress.jpg" alt="个人主页背景" /><div className="profile-shade" /><div className="profile-avatar">镜<span>+</span></div><div className="profile-name"><strong>Scene Fitter</strong><span>场景穿搭创作者</span></div><button type="button">编辑主页</button></div>
       <div className="profile-stats"><span><strong>12</strong>获赞</span><span><strong>{assets.length}</strong>AIGC 资产</span><span><strong>{saved.length}</strong>收藏视频</span><span><strong>8</strong>关注</span></div>
-      <div className="profile-content-tabs"><button type="button">作品</button><button type="button">日常</button><button className="active" type="button">收藏</button><button type="button">喜欢</button></div>
-      <div className="asset-tabs"><button className={tab === "saved" ? "active" : ""} type="button" onClick={() => setTab("saved")}><Bookmark size={15} />视频</button><button className={tab === "assets" ? "active" : ""} type="button" onClick={() => setTab("assets")}><Images size={15} />我的穿搭</button></div>
+      <div className="asset-tabs"><button className={tab === "assets" ? "active" : ""} type="button" onClick={() => setTab("assets")}><Images size={15} />我的穿搭</button><button className={tab === "saved" ? "active" : ""} type="button" onClick={() => setTab("saved")}><Bookmark size={15} />收藏视频</button></div>
       {tab === "assets" ? (
         <div className="asset-gallery">{demoAssets.map((asset) => <button key={asset.id} type="button" aria-label={`${asset.description} ${asset.createdAt}`} onClick={() => onOpenAsset(asset)}><img src={asset.imageUrl} alt="" /><span><Sparkles size={12} />{asset.createdAt}</span></button>)}</div>
       ) : savedVideos.length ? (
