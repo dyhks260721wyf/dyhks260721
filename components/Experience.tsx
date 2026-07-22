@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AlertCircle,
   ArrowLeft,
   Bell,
   Bookmark,
@@ -13,6 +14,7 @@ import {
   Grid2X2,
   Heart,
   Home,
+  Image as ImageIcon,
   Images,
   MessageCircle,
   Minimize2,
@@ -31,12 +33,15 @@ import {
   Sparkles,
   Star,
   Store,
+  Square,
+  SwitchCamera,
   Truck,
   Upload,
   User,
   UserRound,
   Volume2,
   VolumeX,
+  Video,
   WandSparkles,
   X,
   Zap,
@@ -362,16 +367,20 @@ function UploadSlide({ active, uploadCount, onUploaded, onCycle }: {
   onCycle: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
   const touchStartYRef = useRef<number | null>(null);
   const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cameraMode, setCameraMode] = useState<"chooser" | "photo" | "video" | null>(null);
 
   async function uploadMedia(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
+    await uploadFile(file);
+  }
+
+  async function uploadFile(file: File) {
     if (!["video/mp4", "video/webm", "video/quicktime", "image/jpeg", "image/png", "image/webp"].includes(file.type)) {
       setError("请选择 MP4、MOV、WebM、JPEG、PNG 或 WebP 文件");
       return;
@@ -413,7 +422,7 @@ function UploadSlide({ active, uploadCount, onUploaded, onCycle }: {
 
   return (
     <article
-      className={`feed-slide upload-slide ${active ? "active" : ""}`}
+      className={`feed-slide upload-slide ${active ? "active" : ""} ${cameraMode ? "camera-open" : ""}`}
       onTouchStart={(event) => { touchStartYRef.current = event.touches[0]?.clientY ?? null; }}
       onTouchEnd={handleTouchEnd}
       onWheel={(event) => { if (active && !uploading && event.deltaY > 48) onCycle(); }}
@@ -425,12 +434,11 @@ function UploadSlide({ active, uploadCount, onUploaded, onCycle }: {
         <h2>把你刷到的场景，<br />放进这条内容流。</h2>
         <p>上传视频或图片。视频暂停在哪一帧，AI 就从哪一帧提取场景和完整穿搭。</p>
         <input ref={inputRef} className="upload-media-input" type="file" accept="video/mp4,video/quicktime,video/webm,image/jpeg,image/png,image/webp" tabIndex={-1} aria-hidden="true" onChange={uploadMedia} />
-        <input ref={cameraInputRef} className="upload-media-input" type="file" accept="video/*,image/*" capture="environment" tabIndex={-1} aria-hidden="true" onChange={uploadMedia} />
         {uploading
           ? <div className="upload-processing"><span className="spinner" />{status ?? "正在上传"}</div>
           : <div className="upload-action-grid">
               <button className="upload-media-button" type="button" onClick={() => inputRef.current?.click()}><Upload size={18} />选择文件</button>
-              <button className="upload-media-button camera" type="button" onClick={() => cameraInputRef.current?.click()}><Camera size={18} />打开相机</button>
+              <button className="upload-media-button camera" type="button" onClick={() => setCameraMode("chooser")}><Camera size={18} />打开相机</button>
             </div>}
         {error && <p className="upload-error">{error}</p>}
         {!error && status && !uploading && <p className="upload-success"><CheckCircle2 size={15} />{status}</p>}
@@ -441,7 +449,213 @@ function UploadSlide({ active, uploadCount, onUploaded, onCycle }: {
         <small>支持 MP4 / MOV / WebM / JPG / PNG / WebP · 最大 60MB</small>
       </div>
       <button className="upload-next-hint" type="button" onClick={onCycle}><ChevronDown size={17} />继续上滑，回到第一条视频</button>
+      {cameraMode === "chooser" && <CameraModeChooser onChoose={setCameraMode} onClose={() => setCameraMode(null)} />}
+      {(cameraMode === "photo" || cameraMode === "video") && (
+        <CameraCapture
+          mode={cameraMode}
+          onClose={() => setCameraMode(null)}
+          onCaptured={(file) => { setCameraMode(null); void uploadFile(file); }}
+        />
+      )}
     </article>
+  );
+}
+
+function CameraModeChooser({ onChoose, onClose }: {
+  onChoose: (mode: "photo" | "video") => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="camera-choice-layer" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className="camera-choice-card" role="dialog" aria-modal="true" aria-labelledby="camera-choice-title">
+        <header><div><span>DIRECT CAPTURE</span><h3 id="camera-choice-title">选择拍摄方式</h3></div><button type="button" onClick={onClose} aria-label="关闭相机选择"><X size={20} /></button></header>
+        <p>拍摄完成后会直接上传到你的内容流，不再经过系统文件选择器。</p>
+        <div>
+          <button type="button" onClick={() => onChoose("photo")}><span><ImageIcon size={24} /></span><strong>拍照片</strong><small>拍摄当前场景</small></button>
+          <button type="button" onClick={() => onChoose("video")}><span><Video size={24} /></span><strong>录视频</strong><small>最长录制 60 秒</small></button>
+        </div>
+        <small><ShieldCheck size={14} />仅在拍摄时访问相机；视频模式同时请求麦克风权限</small>
+      </section>
+    </div>
+  );
+}
+
+function CameraCapture({ mode, onClose, onCaptured }: {
+  mode: "photo" | "video";
+  onClose: () => void;
+  onCaptured: (file: File) => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<number | null>(null);
+  const cancelledRef = useRef(false);
+  const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
+  const [cameraState, setCameraState] = useState<"requesting" | "ready" | "recording" | "error">("requesting");
+  const [duration, setDuration] = useState(0);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+
+  function stopTimer() {
+    if (timerRef.current !== null) window.clearInterval(timerRef.current);
+    timerRef.current = null;
+  }
+
+  function stopStream() {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+  }
+
+  useEffect(() => {
+    let disposed = false;
+    cancelledRef.current = false;
+    async function openCamera() {
+      stopStream();
+      setCameraState("requesting");
+      setCameraError(null);
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setCameraState("error");
+        setCameraError("当前浏览器不支持网页相机，请使用系统浏览器打开或选择本地文件");
+        return;
+      }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: facingMode }, width: { ideal: 1080 }, height: { ideal: 1920 } },
+          audio: mode === "video",
+        });
+        if (disposed) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        streamRef.current = stream;
+        const preview = videoRef.current;
+        if (preview) {
+          preview.srcObject = stream;
+          await preview.play();
+        }
+        setCameraState("ready");
+      } catch (caught) {
+        if (disposed) return;
+        const name = caught instanceof DOMException ? caught.name : "";
+        setCameraState("error");
+        setCameraError(name === "NotAllowedError"
+          ? mode === "video" ? "请允许访问相机和麦克风后重试" : "请允许访问相机后重试"
+          : name === "NotFoundError" ? mode === "video" ? "没有检测到可用相机或麦克风" : "没有检测到可用相机"
+          : "相机启动失败，请关闭其他正在使用相机的应用后重试");
+      }
+    }
+    void openCamera();
+    return () => {
+      disposed = true;
+      cancelledRef.current = true;
+      stopTimer();
+      const recorder = recorderRef.current;
+      if (recorder?.state === "recording") recorder.stop();
+      recorderRef.current = null;
+      stopStream();
+    };
+    // Re-open the physical camera only when capture mode or lens changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [facingMode, mode]);
+
+  function closeCamera() {
+    cancelledRef.current = true;
+    stopTimer();
+    const recorder = recorderRef.current;
+    if (recorder?.state === "recording") recorder.stop();
+    stopStream();
+    onClose();
+  }
+
+  async function takePhoto() {
+    const preview = videoRef.current;
+    if (!preview || preview.videoWidth === 0) return;
+    try {
+      const file = await captureCameraPhoto(preview);
+      cancelledRef.current = true;
+      stopStream();
+      onCaptured(file);
+    } catch {
+      setCameraState("error");
+      setCameraError("照片生成失败，请重新拍摄");
+    }
+  }
+
+  function startRecording() {
+    const stream = streamRef.current;
+    if (!stream || typeof MediaRecorder === "undefined") {
+      setCameraState("error");
+      setCameraError("当前浏览器不支持网页录制，请选择本地视频文件");
+      return;
+    }
+    const mimeType = supportedRecordingType();
+    if (!mimeType) {
+      setCameraState("error");
+      setCameraError("当前浏览器没有可用的视频编码器，请选择本地视频文件");
+      return;
+    }
+    chunksRef.current = [];
+    cancelledRef.current = false;
+    let recorder: MediaRecorder;
+    try {
+      recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 4_000_000 });
+    } catch {
+      setCameraState("error");
+      setCameraError("视频编码器启动失败，请重新打开相机或选择本地视频");
+      return;
+    }
+    recorderRef.current = recorder;
+    recorder.ondataavailable = (event) => { if (event.data.size > 0) chunksRef.current.push(event.data); };
+    recorder.onerror = () => {
+      stopTimer();
+      setCameraState("error");
+      setCameraError("录制过程中出现错误，请重试");
+    };
+    recorder.onstop = () => {
+      stopTimer();
+      if (cancelledRef.current) return;
+      const actualType = (recorder.mimeType || mimeType).split(";")[0];
+      const extension = actualType === "video/mp4" ? "mp4" : "webm";
+      const blob = new Blob(chunksRef.current, { type: actualType });
+      stopStream();
+      if (blob.size === 0) {
+        setCameraState("error");
+        setCameraError("没有录到有效画面，请重新拍摄");
+        return;
+      }
+      onCaptured(new File([blob], `camera-${Date.now()}.${extension}`, { type: actualType }));
+    };
+    recorder.start(1_000);
+    setDuration(0);
+    setCameraState("recording");
+    timerRef.current = window.setInterval(() => {
+      setDuration((current) => {
+        if (current >= 59 && recorder.state === "recording") recorder.stop();
+        return Math.min(60, current + 1);
+      });
+    }, 1_000);
+  }
+
+  function stopRecording() {
+    const recorder = recorderRef.current;
+    if (recorder?.state === "recording") recorder.stop();
+  }
+
+  return (
+    <section className="camera-capture-layer" role="dialog" aria-modal="true" aria-label={mode === "photo" ? "拍摄照片" : "录制视频"}>
+      <video ref={videoRef} muted playsInline aria-label="相机实时预览" />
+      <div className="camera-capture-shade" />
+      <header><button type="button" onClick={closeCamera} aria-label="关闭相机"><X size={23} /></button><span>{mode === "photo" ? "PHOTO" : cameraState === "recording" ? `REC · ${formatRecordingTime(duration)}` : "VIDEO"}</span><button type="button" disabled={cameraState === "recording"} onClick={() => setFacingMode((current) => current === "environment" ? "user" : "environment")} aria-label="切换前后摄像头"><SwitchCamera size={22} /></button></header>
+      <div className="camera-guide"><i /><i /><i /><i /><span>{cameraState === "requesting" ? "正在请求相机权限" : cameraState === "recording" ? "正在录制，保持手机稳定" : mode === "photo" ? "将人物或场景放入取景框" : "视频最长录制 60 秒"}</span></div>
+      {cameraState === "error" && <div className="camera-capture-error"><AlertCircle size={21} /><strong>无法打开相机</strong><span>{cameraError}</span><button type="button" onClick={closeCamera}>返回上传页</button></div>}
+      {cameraState !== "error" && <footer>
+        {cameraState === "requesting" && <span className="camera-requesting"><span className="spinner" />等待授权</span>}
+        {cameraState === "ready" && mode === "photo" && <button className="camera-shutter photo" type="button" onClick={() => void takePhoto()} aria-label="拍摄照片"><span><Camera size={24} /></span></button>}
+        {cameraState === "ready" && mode === "video" && <button className="camera-shutter video" type="button" onClick={startRecording} aria-label="开始录制视频"><span><Video size={23} /></span></button>}
+        {cameraState === "recording" && <button className="camera-shutter recording" type="button" onClick={stopRecording} aria-label="停止录制"><span><Square size={22} fill="currentColor" /></span></button>}
+        <small>{cameraState === "recording" ? "点击停止并上传" : mode === "photo" ? "点击拍照并上传" : "点击开始录制"}</small>
+      </footer>}
+    </section>
   );
 }
 
@@ -1190,6 +1404,35 @@ function blobToDataUrl(blob: Blob) {
     reader.onerror = () => reject(new Error("无法读取生成图片"));
     reader.readAsDataURL(blob);
   });
+}
+
+function captureCameraPhoto(video: HTMLVideoElement) {
+  const maxEdge = 1920;
+  const scale = Math.min(1, maxEdge / Math.max(video.videoWidth, video.videoHeight));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+  canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+  const context = canvas.getContext("2d");
+  if (!context) return Promise.reject(new Error("CAMERA_CANVAS_UNAVAILABLE"));
+  context.drawImage(video, 0, 0, canvas.width, canvas.height);
+  return new Promise<File>((resolve, reject) => canvas.toBlob((blob) => blob
+    ? resolve(new File([blob], `camera-${Date.now()}.jpg`, { type: "image/jpeg" }))
+    : reject(new Error("CAMERA_PHOTO_FAILED")), "image/jpeg", 0.9));
+}
+
+function supportedRecordingType() {
+  if (typeof MediaRecorder === "undefined") return null;
+  const candidates = [
+    "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+    "video/mp4",
+    "video/webm;codecs=vp8,opus",
+    "video/webm",
+  ];
+  return candidates.find((type) => MediaRecorder.isTypeSupported(type)) ?? null;
+}
+
+function formatRecordingTime(seconds: number) {
+  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
 function canvasPosterFile(source: CanvasImageSource, sourceWidth: number, sourceHeight: number) {
