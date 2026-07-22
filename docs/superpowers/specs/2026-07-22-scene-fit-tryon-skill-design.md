@@ -175,7 +175,6 @@ queued -> preparing -> generating -> saving -> completed
 - `weightRange`：`under_50`、`50_60`、`60_70`、`70_85`、`over_85`。
 - `bodyType`：`hourglass`、`triangle`、`pear`、`rectangle`。
 - `outfitStyle`：`womenswear` 或 `menswear`。
-- `poseStyle`：`candid`、`walking`、`glance`、`editorial`。
 - `consentAccepted`：必须为 `true`。
 
 ### 7.2 输出

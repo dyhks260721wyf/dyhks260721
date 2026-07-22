@@ -56,13 +56,11 @@ type OpenSheet = "comments" | null;
 type EntrySource = "pause_tag" | "ai_analysis";
 type CommentTab = "comments" | "analysis";
 type AppScreen = "feed" | "friends" | "messages" | "assets" | "publish";
-type PoseStyle = "candid" | "walking" | "glance" | "editorial";
 type GenerationMode = "fast" | "refined";
 
 type UserTryOnProfile = {
   outfitStyle: string;
   bodyType: string;
-  poseStyle: PoseStyle;
   heightCm: number;
   weightKg?: number;
   weightRange?: string;
@@ -110,12 +108,6 @@ type GenerationJobPayload = {
 
 const profileStorageKey = "scene-fit:user-profile:v1";
 const assetStorageKey = "scene-fit:generated-assets:v1";
-const poseOptions: Array<{ value: PoseStyle; label: string; hint: string }> = [
-  { value: "candid", label: "自然抓拍", hint: "松弛三分之四站姿" },
-  { value: "walking", label: "漫步动态", hint: "迈步与衣料动势" },
-  { value: "glance", label: "氛围回眸", hint: "转身看向镜头" },
-  { value: "editorial", label: "时尚大片", hint: "不对称镜头姿势" },
-];
 const bodyTypeOptions = [["pear", "梨形"], ["triangle", "倒三角形"], ["hourglass", "沙漏型"], ["rectangle", "H 型"], ["apple", "苹果型"]] as const;
 const legacyWeightMidpoints: Record<string, number> = { under_50: 47, "50_60": 55, "60_70": 65, "70_85": 77, over_85: 90 };
 
@@ -961,7 +953,6 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
   const [weightKg, setWeightKg] = useState(initialProfile?.weightKg ?? legacyWeightMidpoints[initialProfile?.weightRange ?? "50_60"] ?? 55);
   const [outfitStyle, setOutfitStyle] = useState(initialProfile?.outfitStyle ?? "womenswear");
   const [bodyType, setBodyType] = useState(initialProfile?.bodyType ?? "hourglass");
-  const [poseStyle, setPoseStyle] = useState<PoseStyle>(initialProfile?.poseStyle ?? "candid");
   const [consent, setConsent] = useState(initialProfile?.consentAccepted ?? false);
   const [generationMode, setGenerationMode] = useState<GenerationMode>("fast");
   const [generating, setGenerating] = useState(false);
@@ -1047,7 +1038,6 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
     form.set("heightCm", String(heightCm));
     form.set("weightKg", String(weightKg));
     form.set("bodyType", bodyType);
-    form.set("poseStyle", poseStyle);
     form.set("outfitStyle", outfitStyle);
     form.set("consentAccepted", "true");
     form.set("entrySource", entrySource);
@@ -1122,7 +1112,6 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
       onSaveProfile({
         outfitStyle,
         bodyType,
-        poseStyle,
         heightCm,
         weightKg,
         identityDataUrl,
@@ -1266,23 +1255,13 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
                 <button className={bodyType === value ? "active" : ""} key={value} type="button" onClick={() => setBodyType(value)}><span className={`body-shape shape-${value}`}><UserRound size={28} /></span><strong>{label}</strong>{bodyType === value && <CheckCircle2 size={13} />}</button>
               ))}
             </div>
-            <label className="field-label"><span>动作氛围</span><small>不复刻原视频姿势</small></label>
-            <div className="pose-style-grid">
-              {poseOptions.map((option) => (
-                <button className={poseStyle === option.value ? "active" : ""} key={option.value} type="button" onClick={() => setPoseStyle(option.value)}>
-                  <span className={`pose-glyph pose-${option.value}`}><UserRound size={23} /></span>
-                  <span><strong>{option.label}</strong><small>{option.hint}</small></span>
-                  {poseStyle === option.value && <CheckCircle2 size={14} />}
-                </button>
-              ))}
-            </div>
             <label className="field-label" htmlFor="height">身高 <strong>{heightCm} cm</strong></label>
             <input id="height" className="measure-range" type="range" min="140" max="210" value={heightCm} onChange={(event) => setHeightCm(Number(event.target.value))} />
             <div className="range-labels"><span>140</span><span>175</span><span>210</span></div>
             <label className="field-label" htmlFor="weight">体重 <strong>{weightKg} kg</strong></label>
             <input id="weight" className="measure-range" type="range" min="35" max="120" value={weightKg} onChange={(event) => setWeightKg(Number(event.target.value))} />
             <div className="range-labels"><span>35</span><span>78</span><span>120</span></div>
-            <p className="profile-hint">生成时会按身高、体重与体型重建全身比例，并重新编排姿势；结果仅作视觉预览，不提供尺码判断。</p>
+            <p className="profile-hint">生成时会按身高、体重与体型重建全身比例，并自然适配服装与画面；结果仅作视觉预览，不提供尺码判断。</p>
             <button className="flow-primary" type="button" onClick={() => setStep(2)}>下一步</button>
           </div>
         )}

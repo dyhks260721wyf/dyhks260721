@@ -29,25 +29,6 @@ const bodyProfiles: Record<string, { label: string; instruction: string }> = {
   },
 };
 
-const poseProfiles: Record<string, { label: string; instruction: string }> = {
-  candid: {
-    label: "relaxed candid",
-    instruction: "use a relaxed three-quarter stance, shift weight onto one leg, keep the arms naturally separated from the torso, and turn the head toward the scenery",
-  },
-  walking: {
-    label: "walking motion",
-    instruction: "capture a believable mid-step walk, with one foot clearly forward, natural counter-swing in the arms, a slight torso turn, and fabric reacting subtly to motion",
-  },
-  glance: {
-    label: "over-the-shoulder glance",
-    instruction: "turn the torso about 30 degrees away from camera, look back over one shoulder, use an asymmetric hip shift, and place the hands naturally without covering the waistline",
-  },
-  editorial: {
-    label: "confident editorial",
-    instruction: "create a confident asymmetric fashion pose with one leg extended, one elbow bent away from the body, a lifted chest, and a camera-aware head angle",
-  },
-};
-
 const legacyWeightMidpoints: Record<string, number> = { under_50: 47, "50_60": 55, "60_70": 65, "70_85": 77, over_85: 90 };
 
 function statureInstruction(heightCm: number, weightKg: number) {
@@ -86,7 +67,6 @@ export async function POST(request: Request) {
     const requestedWeightKg = form.has("weightKg") ? Number(form.get("weightKg")) : Number.NaN;
     const weightKg = Number.isFinite(requestedWeightKg) ? requestedWeightKg : legacyWeightMidpoints[legacyWeightRange] ?? 55;
     const bodyType = String(form.get("bodyType") ?? "hourglass");
-    const poseStyle = String(form.get("poseStyle") ?? "candid");
     const outfitStyle = String(form.get("outfitStyle") ?? "womenswear");
     const consentAccepted = String(form.get("consentAccepted")) === "true";
     const sceneFrame = form.get("sceneFrame");
@@ -101,8 +81,8 @@ export async function POST(request: Request) {
     if (!consentAccepted) {
       return Response.json({ code: "CONSENT_REQUIRED", message: "请先确认人像使用授权", requestId }, { status: 400 });
     }
-    if (!Number.isFinite(heightCm) || heightCm < 140 || heightCm > 210 || !Number.isFinite(weightKg) || weightKg < 35 || weightKg > 120 || !bodyProfiles[bodyType] || !poseProfiles[poseStyle]) {
-      return Response.json({ code: "INVALID_INPUT", message: "请检查身高、体重、身材类型和姿势偏好", requestId }, { status: 400 });
+    if (!Number.isFinite(heightCm) || heightCm < 140 || heightCm > 210 || !Number.isFinite(weightKg) || weightKg < 35 || weightKg > 120 || !bodyProfiles[bodyType]) {
+      return Response.json({ code: "INVALID_INPUT", message: "请检查身高、体重和身材类型", requestId }, { status: 400 });
     }
     if ((revision instanceof File && revision.size > 0) !== Boolean(revisionPrompt)) {
       return Response.json({ code: "INVALID_REVISION", message: "继续修改时需要同时提供上一张图片和修改要求", requestId }, { status: 400 });
@@ -160,8 +140,6 @@ export async function POST(request: Request) {
       statureInstruction: statureInstruction(heightCm, weightKg),
       heightCm,
       weightLabel: `${weightKg} kg`,
-      poseStyle: poseProfiles[poseStyle].label,
-      poseInstruction: poseProfiles[poseStyle].instruction,
       analyzeProducts: Boolean(video.userUploaded),
       productImageUrl: video.posterUrl,
       productOwnerId: video.userUploaded ? video.id : null,

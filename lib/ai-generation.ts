@@ -41,8 +41,6 @@ type GenerationInput = {
   statureInstruction: string;
   heightCm: number;
   weightLabel: string;
-  poseStyle: string;
-  poseInstruction: string;
   analyzeProducts: boolean;
   productImageUrl: string;
   productOwnerId: string | null;
@@ -250,13 +248,8 @@ PERSONALIZED BODY — MUST BE VISIBLY APPLIED
 - Reconstruct the subject from the neck down around these target proportions. Do not inherit or average toward the body shape of the model in Image 1 or the identity board.
 - Adapt garment fit, folds and drape naturally to the target shoulders, waist, hips, thighs and limb proportions. Keep the body realistic and non-exaggerated; do not turn every body type into a slim hourglass.
 
-PERSONALIZED POSE AND CAMERA — MUST DIFFER FROM IMAGE 1
-- Pose direction: ${input.poseStyle}; ${input.poseInstruction}.
-- The final pose must differ from Image 1 in at least four visible ways: head direction, arm arrangement, torso angle, hip/weight distribution, and leg position.
-- Recompose as a full-body or head-to-calf fashion frame so the shoulders, waist, hips and leg proportions are visible. Do not hide the silhouette behind crossed arms, a bag, foreground objects or a tight crop.
-
 PRESERVE AND FINISH
-- Preserve the complete outfit and recognizable scene from Image 1, but allow subject placement and framing to change for the new pose.
+- Preserve the complete outfit and recognizable scene from Image 1, while composing a natural full-body or head-to-calf fashion frame that clearly shows the personalized proportions.
 - Styling direction: ${input.outfitStyle}. Context: ${input.contentSummary}. Location: ${input.location}.
 - Show exactly one adult with natural anatomy and a coherent shadow/contact with the ground.
 - No text, logos, watermarks, duplicate people, extra limbs, invented garments or unrelated accessories.`);
