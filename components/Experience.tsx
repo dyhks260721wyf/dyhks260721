@@ -233,6 +233,20 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
     requestAnimationFrame(() => feedRef.current?.scrollTo({ top: nextIndex * feedRef.current.clientHeight, behavior: "auto" }));
   }
 
+  function jumpToUpload() {
+    const nextIndex = feedVideos.length;
+    setOpenSheet(null);
+    setPaused(false);
+    setScreen("feed");
+    setActiveIndex(nextIndex);
+    requestAnimationFrame(() => feedRef.current?.scrollTo({ top: nextIndex * feedRef.current.clientHeight, behavior: "smooth" }));
+  }
+
+  function cycleToFirstVideo() {
+    setActiveIndex(0);
+    requestAnimationFrame(() => feedRef.current?.scrollTo({ top: 0, behavior: "smooth" }));
+  }
+
   function jumpToOriginal(videoId: string) {
     const index = feedVideos.findIndex((video) => video.id === videoId);
     if (index >= 0) {
@@ -261,12 +275,15 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
       </aside>
 
       <section className="device-frame" aria-label="场景化穿搭短视频体验">
-        {screen === "feed" && <div className="top-tabs">
-          <button type="button">同城</button>
-          <button type="button">关注</button>
-          <button className="active" type="button">推荐</button>
-          <button className="top-search" type="button" aria-label="搜索"><Search size={21} /></button>
-        </div>}
+        {screen === "feed" && <>
+          <div className="top-tabs">
+            <button type="button">同城</button>
+            <button type="button">关注</button>
+            <button className="active" type="button">推荐</button>
+            <button className="top-search" type="button" aria-label="搜索"><Search size={21} /></button>
+          </div>
+          <button className="top-upload-shortcut" type="button" aria-label="上传视频或图片" onClick={jumpToUpload}><Plus size={23} /></button>
+        </>}
 
         <div className="video-feed" ref={feedRef} onScroll={handleFeedScroll}>
           {feedVideos.map((video, index) => (
@@ -289,6 +306,7 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
             active={activeIndex === feedVideos.length}
             uploadCount={feedVideos.filter((video) => video.userUploaded).length}
             onUploaded={appendUploadedVideo}
+            onCycle={cycleToFirstVideo}
           />
         </div>
 
@@ -337,12 +355,15 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
   );
 }
 
-function UploadSlide({ active, uploadCount, onUploaded }: {
+function UploadSlide({ active, uploadCount, onUploaded, onCycle }: {
   active: boolean;
   uploadCount: number;
   onUploaded: (video: VideoPreset) => void;
+  onCycle: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const touchStartYRef = useRef<number | null>(null);
   const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -351,8 +372,8 @@ function UploadSlide({ active, uploadCount, onUploaded }: {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    if (!["video/mp4", "video/webm", "image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-      setError("请选择 MP4、WebM、JPEG、PNG 或 WebP 文件");
+    if (!["video/mp4", "video/webm", "video/quicktime", "image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setError("请选择 MP4、MOV、WebM、JPEG、PNG 或 WebP 文件");
       return;
     }
     if (file.size > 60 * 1024 * 1024) {
@@ -382,27 +403,44 @@ function UploadSlide({ active, uploadCount, onUploaded }: {
     }
   }
 
+  function handleTouchEnd(event: React.TouchEvent<HTMLElement>) {
+    const startY = touchStartYRef.current;
+    touchStartYRef.current = null;
+    if (!active || uploading || startY === null) return;
+    const endY = event.changedTouches[0]?.clientY ?? startY;
+    if (startY - endY > 52) onCycle();
+  }
+
   return (
-    <article className={`feed-slide upload-slide ${active ? "active" : ""}`}>
+    <article
+      className={`feed-slide upload-slide ${active ? "active" : ""}`}
+      onTouchStart={(event) => { touchStartYRef.current = event.touches[0]?.clientY ?? null; }}
+      onTouchEnd={handleTouchEnd}
+      onWheel={(event) => { if (active && !uploading && event.deltaY > 48) onCycle(); }}
+    >
       <div className="upload-aurora" aria-hidden="true"><i /><i /><i /></div>
       <div className="upload-stage">
         <div className="upload-kicker"><span>FEED END</span><i />轮到你的画面</div>
         <div className="upload-lens" aria-hidden="true"><span><Camera size={34} /></span><i /></div>
         <h2>把你刷到的场景，<br />放进这条内容流。</h2>
         <p>上传视频或图片。视频暂停在哪一帧，AI 就从哪一帧提取场景和完整穿搭。</p>
-        <input ref={inputRef} className="upload-media-input" type="file" accept="video/mp4,video/webm,image/jpeg,image/png,image/webp" onChange={uploadMedia} />
-        <button className="upload-media-button" disabled={uploading} type="button" onClick={() => inputRef.current?.click()}>
-          {uploading ? <><span className="spinner" />{status ?? "正在上传"}</> : <><Upload size={19} />选择视频或图片</>}
-        </button>
+        <input ref={inputRef} className="upload-media-input" type="file" accept="video/mp4,video/quicktime,video/webm,image/jpeg,image/png,image/webp" tabIndex={-1} aria-hidden="true" onChange={uploadMedia} />
+        <input ref={cameraInputRef} className="upload-media-input" type="file" accept="video/*,image/*" capture="environment" tabIndex={-1} aria-hidden="true" onChange={uploadMedia} />
+        {uploading
+          ? <div className="upload-processing"><span className="spinner" />{status ?? "正在上传"}</div>
+          : <div className="upload-action-grid">
+              <button className="upload-media-button" type="button" onClick={() => inputRef.current?.click()}><Upload size={18} />选择文件</button>
+              <button className="upload-media-button camera" type="button" onClick={() => cameraInputRef.current?.click()}><Camera size={18} />打开相机</button>
+            </div>}
         {error && <p className="upload-error">{error}</p>}
         {!error && status && !uploading && <p className="upload-success"><CheckCircle2 size={15} />{status}</p>}
         <div className="upload-meta">
           <span><ShieldCheck size={14} />上传即加入项目内容流</span>
           <span><Images size={14} />已有 {uploadCount} 个我的场景</span>
         </div>
-        <small>支持 MP4 / WebM / JPG / PNG / WebP · 最大 60MB</small>
+        <small>支持 MP4 / MOV / WebM / JPG / PNG / WebP · 最大 60MB</small>
       </div>
-      <div className="upload-next-hint"><ChevronDown size={17} />上传成功后自动进入你的画面</div>
+      <button className="upload-next-hint" type="button" onClick={onCycle}><ChevronDown size={17} />继续上滑，回到第一条视频</button>
     </article>
   );
 }
@@ -1191,7 +1229,7 @@ async function createMediaPoster(file: File) {
     video.src = objectUrl;
     await new Promise<void>((resolve, reject) => {
       video.onloadeddata = () => resolve();
-      video.onerror = () => reject(new Error("视频无法读取，请确认文件编码为 H.264 或 WebM"));
+      video.onerror = () => reject(new Error("视频无法读取，请确认文件为 MP4、MOV 或 WebM"));
       video.load();
     });
     if (Number.isFinite(video.duration) && video.duration > 0.4) {

@@ -7,6 +7,7 @@ const maxMediaBytes = 60 * 1024 * 1024;
 const maxPosterBytes = 8 * 1024 * 1024;
 const mediaTypes = new Map<string, "video" | "image">([
   ["video/mp4", "video"],
+  ["video/quicktime", "video"],
   ["video/webm", "video"],
   ["image/jpeg", "image"],
   ["image/png", "image"],
@@ -33,7 +34,7 @@ export async function POST(request: Request) {
     }
     const mediaType = mediaTypes.get(media.type);
     if (!mediaType) {
-      return Response.json({ code: "UNSUPPORTED_MEDIA", message: "仅支持 MP4、WebM、JPEG、PNG 或 WebP", requestId }, { status: 415 });
+      return Response.json({ code: "UNSUPPORTED_MEDIA", message: "仅支持 MP4、MOV、WebM、JPEG、PNG 或 WebP", requestId }, { status: 415 });
     }
     if (media.size > maxMediaBytes) {
       return Response.json({ code: "MEDIA_TOO_LARGE", message: "上传文件不能超过 60MB", requestId }, { status: 413 });
