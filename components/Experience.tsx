@@ -46,10 +46,12 @@ type OpenSheet = "search" | "comments" | null;
 type EntrySource = "pause_tag" | "comment_tab" | "ai_analysis";
 type CommentTab = "comments" | "analysis" | "tryon";
 type AppScreen = "feed" | "friends" | "messages" | "assets" | "publish";
+type PoseStyle = "candid" | "walking" | "glance" | "editorial";
 
 type UserTryOnProfile = {
   outfitStyle: string;
   bodyType: string;
+  poseStyle: PoseStyle;
   heightCm: number;
   weightRange: string;
   identityDataUrl: string | null;
@@ -79,6 +81,12 @@ type GenerationJobPayload = {
 
 const profileStorageKey = "scene-fit:user-profile:v1";
 const assetStorageKey = "scene-fit:generated-assets:v1";
+const poseOptions: Array<{ value: PoseStyle; label: string; hint: string }> = [
+  { value: "candid", label: "自然抓拍", hint: "松弛三分之四站姿" },
+  { value: "walking", label: "漫步动态", hint: "迈步与衣料动势" },
+  { value: "glance", label: "氛围回眸", hint: "转身看向镜头" },
+  { value: "editorial", label: "时尚大片", hint: "不对称镜头姿势" },
+];
 
 export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -490,8 +498,8 @@ function CommentsSheet({ video, tab, onTabChange, onClose, onTryOn }: { video: V
             <div className="tryon-tab-visual"><img src={video.posterUrl} alt="AI 上身场景预览" /><div className="tryon-tab-scan"><ScanFace size={27} /><span>人物形象</span></div><div className="tryon-tab-plus">+</div><div className="tryon-tab-look"><WandSparkles size={27} /><span>完整 Look</span></div></div>
             <p className="eyebrow">AI TRY-ON</p>
             <h3>把视频里的整套穿搭，<br />放进你的形象。</h3>
-            <p>录入一张清晰人像和基础身材信息。生成时保留原场景、原穿搭与画面氛围。</p>
-            <div className="tryon-tab-benefits"><span><ShieldCheck size={15} />人像授权确认</span><span><Images size={15} />结果存入 AIGC 相册</span></div>
+            <p>录入清晰人像与身材信息，再选择你喜欢的动作。生成时保留原场景与整套 Look，重新塑造身体比例和姿势。</p>
+            <div className="tryon-tab-benefits"><span><ShieldCheck size={15} />人像授权确认</span><span><UserRound size={15} />体型与姿势个性化</span><span><Images size={15} />结果存入 AIGC 相册</span></div>
             <button className="flow-primary" type="button" onClick={() => onTryOn("comment_tab")}><Camera size={18} />开始 AI 试穿</button>
           </div>
         )}
@@ -534,6 +542,7 @@ function TryOnFlow({ video, entrySource, initialProfile, onClose, onSaveProfile,
   const [weightRange, setWeightRange] = useState(initialProfile?.weightRange ?? "50_60");
   const [outfitStyle, setOutfitStyle] = useState(initialProfile?.outfitStyle ?? "womenswear");
   const [bodyType, setBodyType] = useState(initialProfile?.bodyType ?? "hourglass");
+  const [poseStyle, setPoseStyle] = useState<PoseStyle>(initialProfile?.poseStyle ?? "candid");
   const [consent, setConsent] = useState(initialProfile?.consentAccepted ?? false);
   const [generating, setGenerating] = useState(false);
   const [generationStage, setGenerationStage] = useState(0);
@@ -638,6 +647,7 @@ function TryOnFlow({ video, entrySource, initialProfile, onClose, onSaveProfile,
       onSaveProfile({
         outfitStyle,
         bodyType,
+        poseStyle,
         heightCm,
         weightRange,
         identityDataUrl,
@@ -650,6 +660,7 @@ function TryOnFlow({ video, entrySource, initialProfile, onClose, onSaveProfile,
       form.set("heightCm", String(heightCm));
       form.set("weightRange", weightRange);
       form.set("bodyType", bodyType);
+      form.set("poseStyle", poseStyle);
       form.set("outfitStyle", outfitStyle);
       form.set("consentAccepted", "true");
       form.set("entrySource", entrySource);
@@ -712,7 +723,7 @@ function TryOnFlow({ video, entrySource, initialProfile, onClose, onSaveProfile,
       id: `${video.id}-${Date.now()}`,
       imageUrl: resultUrl,
       video,
-      description: `在${video.location}的光线里，完整复刻这套 ${video.analysis.tags.slice(0, 2).join("、")} Look。`,
+      description: `在${video.location}的光线里，用我的比例和动作重新演绎这套 ${video.analysis.tags.slice(0, 2).join("、")} Look。`,
       createdAt: "刚刚",
     };
   }
@@ -782,6 +793,16 @@ function TryOnFlow({ video, entrySource, initialProfile, onClose, onSaveProfile,
                 <button className={bodyType === value ? "active" : ""} key={value} type="button" onClick={() => setBodyType(value)}><span className={`body-shape shape-${index}`}><UserRound size={31} /></span><strong>{label}</strong>{bodyType === value && <CheckCircle2 size={14} />}</button>
               ))}
             </div>
+            <label className="field-label"><span>动作氛围</span><small>不复刻原视频姿势</small></label>
+            <div className="pose-style-grid">
+              {poseOptions.map((option) => (
+                <button className={poseStyle === option.value ? "active" : ""} key={option.value} type="button" onClick={() => setPoseStyle(option.value)}>
+                  <span className={`pose-glyph pose-${option.value}`}><UserRound size={23} /></span>
+                  <span><strong>{option.label}</strong><small>{option.hint}</small></span>
+                  {poseStyle === option.value && <CheckCircle2 size={14} />}
+                </button>
+              ))}
+            </div>
             <label className="field-label" htmlFor="height">身高 <strong>{heightCm} cm</strong></label>
             <input id="height" className="height-range" type="range" min="140" max="210" value={heightCm} onChange={(event) => setHeightCm(Number(event.target.value))} />
             <div className="range-labels"><span>140</span><span>175</span><span>210</span></div>
@@ -789,7 +810,7 @@ function TryOnFlow({ video, entrySource, initialProfile, onClose, onSaveProfile,
             <div className="weight-grid">
               {[['under_50', '50kg 以下'], ['50_60', '50–60kg'], ['60_70', '60–70kg'], ['70_85', '70–85kg'], ['over_85', '85kg 以上']].map(([value, label]) => <button className={weightRange === value ? "active" : ""} key={value} type="button" onClick={() => setWeightRange(value)}>{label}</button>)}
             </div>
-            <p className="profile-hint">身材信息只用于大致比例，不提供尺码或合身度判断。</p>
+            <p className="profile-hint">生成时会按身高、体重与体型重建全身比例，并重新编排姿势；结果仅作视觉预览，不提供尺码判断。</p>
             <button className="flow-primary" type="button" onClick={() => setStep(2)}>确认这些信息</button>
           </div>
         )}
@@ -802,7 +823,7 @@ function TryOnFlow({ video, entrySource, initialProfile, onClose, onSaveProfile,
               <article><img src={useDemoIdentity ? video.posterUrl : identityDataUrl ?? video.posterUrl} alt="人物" /><span>03 / 人物</span><strong>{useDemoIdentity ? "演示人物" : "我的形象"}</strong></article>
             </div>
             {initialProfile && <div className="profile-reuse-note"><CheckCircle2 size={18} /><div><strong>已使用你上次保存的形象</strong><span>以后从三个入口进入，都可以直接生成</span></div><button type="button" onClick={() => setStep(0)}>修改</button></div>}
-            <div className="profile-summary"><span>{outfitStyle === "womenswear" ? "女士穿搭" : "男士穿搭"}</span><span>{bodyType === "hourglass" ? "沙漏型" : bodyType === "triangle" ? "倒三角" : bodyType === "pear" ? "梨型" : "直筒型"}</span><span>{heightCm} cm</span><span>{weightRange.replace("_", "–")} kg</span></div>
+            <div className="profile-summary"><span>{outfitStyle === "womenswear" ? "女士穿搭" : "男士穿搭"}</span><span>{bodyType === "hourglass" ? "沙漏型" : bodyType === "triangle" ? "倒三角" : bodyType === "pear" ? "梨型" : "直筒型"}</span><span>{heightCm} cm</span><span>{weightRange.replace("_", "–")} kg</span><span>{poseOptions.find((item) => item.value === poseStyle)?.label}</span></div>
             <label className="consent-row"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><i>{consent && <Check size={14} />}</i><span>我确认使用本人或已获授权的人像，并同意将图片发送至图像生成服务处理。</span></label>
             {error && <p className="form-error">{error}</p>}
             <button className="flow-primary generate-button" disabled={generating} type="submit">{generating ? <><span className="spinner" />正在融合场景与 Look</> : <><WandSparkles size={18} />生成我的场景 Look</>}</button>
@@ -818,7 +839,7 @@ function TryOnFlow({ video, entrySource, initialProfile, onClose, onSaveProfile,
             <div className="result-panel">
               <span className="result-emotion">这一刻，场景终于有了你的样子</span>
               <h4>你已经在这个场景里了。</h4>
-              <p>{`画面保留了${video.location}的光线、氛围与原视频完整 Look，让你的形象自然进入同一段故事。`}</p>
+              <p>{`画面保留了${video.location}的光线、氛围与原视频完整 Look，并按你的身材比例和「${poseOptions.find((item) => item.value === poseStyle)?.label}」重新编排。`}</p>
               <button className={`save-result-block ${resultSaved ? "saved" : ""}`} type="button" onClick={saveResult}><span>{resultSaved ? <CheckCircle2 size={20} /> : <Bookmark size={20} />}<strong>{resultSaved ? "已收藏到我的穿搭" : "收藏图片"}</strong></span><small>{resultSaved ? "可前往「我–收藏–我的穿搭」查看" : "收藏后可进入个人页发布作品"}</small></button>
               <div className="result-actions"><button type="button" onClick={downloadResult}><Download size={18} />保存本地</button><button type="button" onClick={() => setStep(2)}><RotateCcw size={18} />再生成</button><button type="button" onClick={onClose}><Play size={18} />继续刷</button></div>
               <div className="result-publish-row"><button type="button" onClick={publishResult}><Sparkles size={18} />一键发布</button><button type="button" onClick={onJumpOriginal}><Music2 size={17} />原视频 / 原声</button></div>

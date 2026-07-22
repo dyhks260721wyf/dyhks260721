@@ -13,12 +13,62 @@ const weightLabels: Record<string, string> = {
   over_85: "over 85 kg",
 };
 
-const bodyTypeLabels: Record<string, string> = {
-  hourglass: "hourglass",
-  triangle: "inverted triangle",
-  pear: "pear",
-  rectangle: "rectangle",
+const bodyProfiles: Record<string, { label: string; instruction: string }> = {
+  hourglass: {
+    label: "hourglass",
+    instruction: "shoulders and hips have similar visual width, with a clearly defined but natural waist",
+  },
+  triangle: {
+    label: "inverted triangle",
+    instruction: "shoulders and upper torso are visibly broader than the waist and hips, with comparatively narrower hips",
+  },
+  pear: {
+    label: "pear",
+    instruction: "shoulders are narrower than the hips, with a defined waist and naturally fuller hips and upper thighs",
+  },
+  rectangle: {
+    label: "rectangle",
+    instruction: "shoulders, waist and hips have closer visual widths, with a straighter torso and only a subtle waist definition",
+  },
 };
+
+const poseProfiles: Record<string, { label: string; instruction: string }> = {
+  candid: {
+    label: "relaxed candid",
+    instruction: "use a relaxed three-quarter stance, shift weight onto one leg, keep the arms naturally separated from the torso, and turn the head toward the scenery",
+  },
+  walking: {
+    label: "walking motion",
+    instruction: "capture a believable mid-step walk, with one foot clearly forward, natural counter-swing in the arms, a slight torso turn, and fabric reacting subtly to motion",
+  },
+  glance: {
+    label: "over-the-shoulder glance",
+    instruction: "turn the torso about 30 degrees away from camera, look back over one shoulder, use an asymmetric hip shift, and place the hands naturally without covering the waistline",
+  },
+  editorial: {
+    label: "confident editorial",
+    instruction: "create a confident asymmetric fashion pose with one leg extended, one elbow bent away from the body, a lifted chest, and a camera-aware head angle",
+  },
+};
+
+const weightMidpoints: Record<string, number> = { under_50: 47, "50_60": 55, "60_70": 65, "70_85": 77, over_85: 90 };
+
+function statureInstruction(heightCm: number, weightRange: string) {
+  const bmi = weightMidpoints[weightRange] / ((heightCm / 100) ** 2);
+  const heightShape = heightCm < 158
+    ? "a shorter stature with proportionally compact vertical lines"
+    : heightCm > 175
+      ? "a taller stature with visibly longer vertical and limb proportions"
+      : "a medium stature with balanced torso-to-leg proportions";
+  const build = bmi < 19
+    ? "a naturally lean frame"
+    : bmi < 23.5
+      ? "a balanced medium-light frame"
+      : bmi < 27.5
+        ? "a softly full medium frame"
+        : "a fuller, sturdy frame";
+  return `${heightShape} and ${build}`;
+}
 
 function publicFile(assetUrl: string) {
   const safePath = assetUrl.replace(/^\/+/, "");
@@ -36,6 +86,7 @@ export async function POST(request: Request) {
     const heightCm = Number(form.get("heightCm") ?? 168);
     const weightRange = String(form.get("weightRange") ?? "50_60");
     const bodyType = String(form.get("bodyType") ?? "hourglass");
+    const poseStyle = String(form.get("poseStyle") ?? "candid");
     const outfitStyle = String(form.get("outfitStyle") ?? "womenswear");
     const consentAccepted = String(form.get("consentAccepted")) === "true";
     const identity = form.get("identityBoard");
@@ -46,8 +97,8 @@ export async function POST(request: Request) {
     if (!consentAccepted) {
       return Response.json({ code: "CONSENT_REQUIRED", message: "请先确认人像使用授权", requestId }, { status: 400 });
     }
-    if (!Number.isFinite(heightCm) || heightCm < 140 || heightCm > 210 || !weightLabels[weightRange] || !bodyTypeLabels[bodyType]) {
-      return Response.json({ code: "INVALID_INPUT", message: "请检查身高、体重和身材类型", requestId }, { status: 400 });
+    if (!Number.isFinite(heightCm) || heightCm < 140 || heightCm > 210 || !weightLabels[weightRange] || !bodyProfiles[bodyType] || !poseProfiles[poseStyle]) {
+      return Response.json({ code: "INVALID_INPUT", message: "请检查身高、体重、身材类型和姿势偏好", requestId }, { status: 400 });
     }
 
     const sceneBytes = await readFile(publicFile(video.posterUrl));
@@ -69,9 +120,13 @@ export async function POST(request: Request) {
       contentSummary: video.analysis.summary,
       location: video.location,
       outfitStyle: outfitStyle === "menswear" ? "menswear" : "womenswear",
-      bodyType: bodyTypeLabels[bodyType],
+      bodyType: bodyProfiles[bodyType].label,
+      bodyShapeInstruction: bodyProfiles[bodyType].instruction,
+      statureInstruction: statureInstruction(heightCm, weightRange),
       heightCm,
       weightLabel: weightLabels[weightRange],
+      poseStyle: poseProfiles[poseStyle].label,
+      poseInstruction: poseProfiles[poseStyle].instruction,
     });
 
     return Response.json(

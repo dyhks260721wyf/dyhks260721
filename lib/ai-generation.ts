@@ -27,8 +27,12 @@ type GenerationInput = {
   location: string;
   outfitStyle: string;
   bodyType: string;
+  bodyShapeInstruction: string;
+  statureInstruction: string;
   heightCm: number;
   weightLabel: string;
+  poseStyle: string;
+  poseInstruction: string;
 };
 
 class GenerationFailure extends Error {
@@ -144,17 +148,30 @@ function promptFor(input: GenerationInput) {
     ? "Image 2 is an authorized identity reference. Preserve that adult person's recognizable facial identity while replacing the model in Image 1."
     : "No separate identity image was supplied. Preserve the adult person visible in Image 1 while re-rendering the photograph.";
 
-  return `You are the sole vision and image-generation orchestrator for an authorized AI fashion try-on.
-Analyze every supplied image yourself, then invoke the built-in image_generation tool backed specifically by gpt-image-2. Do not merely describe a prompt and do not ask the caller to invoke another image API. Wait for the image tool and return the final generated image.
+  return `GOAL
+Create one personalized, photorealistic vertical fashion photograph. Analyze all supplied images, then invoke the built-in image_generation tool backed specifically by gpt-image-2. Wait for the tool and return its final image; do not merely return instructions.
 
-Image 1 is the authoritative scene, complete outfit, pose, camera framing, lighting direction, background, and atmosphere reference. Never invent garments that are not visible. ${identityInstruction}
+REFERENCE ROLES
+- Image 1 is authoritative for the location, background identity, complete garment inventory, garment colors and materials, accessories, and lighting atmosphere.
+- Image 1 is NOT authoritative for the original model's body silhouette, exact pose, limb placement, head direction, subject placement, or camera crop. These must be re-staged.
+- ${identityInstruction}
 
-Content context: ${input.contentSummary}
-Location: ${input.location}
-Styling direction: ${input.outfitStyle}
-Approximate body proportions: ${input.heightCm} cm, ${input.weightLabel}, ${input.bodyType} body type.
+PERSONALIZED BODY — MUST BE VISIBLY APPLIED
+- Target measurements: ${input.heightCm} cm and ${input.weightLabel}; render ${input.statureInstruction}.
+- Target body shape: ${input.bodyType}; ${input.bodyShapeInstruction}.
+- Reconstruct the subject from the neck down around these target proportions. Do not inherit or average toward the body shape of the model in Image 1 or the identity board.
+- Adapt garment fit, folds and drape naturally to the target shoulders, waist, hips, thighs and limb proportions. Keep the body realistic and non-exaggerated; do not turn every body type into a slim hourglass.
 
-Generate exactly one photorealistic adult person with natural anatomy. Preserve the complete outfit and original scene composition from Image 1. Keep the authorized identity recognizable when Image 2 is present. Produce a vertical fashion photograph with no text, logos, watermarks, duplicate people, extra limbs, or unrelated accessories.`;
+PERSONALIZED POSE AND CAMERA — MUST DIFFER FROM IMAGE 1
+- Pose direction: ${input.poseStyle}; ${input.poseInstruction}.
+- The final pose must differ from Image 1 in at least four visible ways: head direction, arm arrangement, torso angle, hip/weight distribution, and leg position.
+- Recompose as a full-body or head-to-calf fashion frame so the shoulders, waist, hips and leg proportions are visible. Do not hide the silhouette behind crossed arms, a bag, foreground objects or a tight crop.
+
+PRESERVE AND FINISH
+- Preserve the complete outfit and recognizable scene from Image 1, but allow subject placement and framing to change for the new pose.
+- Styling direction: ${input.outfitStyle}. Context: ${input.contentSummary}. Location: ${input.location}.
+- Show exactly one adult with natural anatomy and a coherent shadow/contact with the ground.
+- No text, logos, watermarks, duplicate people, extra limbs, invented garments or unrelated accessories.`;
 }
 
 async function runGeneration(job: GenerationJob, input: GenerationInput) {
@@ -192,7 +209,7 @@ async function runGeneration(job: GenerationJob, input: GenerationInput) {
         input: [{ role: "user", content }],
         tools: [{
           type: "image_generation",
-          quality: "low",
+          quality: "medium",
           size: "1024x1536",
           output_format: "jpeg",
           output_compression: 85,
