@@ -309,24 +309,13 @@ img, video { display: block; }
 .analysis-try-on { border-radius: 10px; background: #17171b; }
 
 .asset-screen { background: #f5f5f5; }
-.profile-hero { height: 236px; }
-.profile-shade { background: linear-gradient(180deg, rgba(0,0,0,.08), rgba(0,0,0,.16) 42%, rgba(0,0,0,.86)); }
-.profile-avatar { width: 68px; height: 68px; bottom: 18px; font-size: 21px; }
-.profile-name { left: 96px; bottom: 25px; }
-.profile-name strong { font-size: 17px; }
-.profile-name span { font-size: 10px; }
-.profile-hero > button { min-height: 38px; bottom: 25px; padding: 0 15px; border-radius: 6px; font-size: 10px; font-weight: 650; }
-.profile-stats { padding: 15px 8px 14px; border-bottom: 1px solid #ededed; }
-.profile-stats strong { font-size: 16px; }
-.profile-stats span { gap: 4px; font-size: 9px; }
-.asset-tabs { border-bottom-color: #e6e6e6; }
-.asset-tabs button { min-height: 50px; gap: 6px; font-size: 12px; }
-.asset-tabs button.active::after { left: 35%; right: 35%; height: 3px; }
-.asset-gallery { gap: 1px; padding: 1px; background: #fff; }
-.asset-gallery button { height: 285px; }
-.asset-gallery span { left: 7px; bottom: 7px; padding: 5px 7px; font-size: 9px; }
-.saved-video-list { padding: 9px 10px; }
-.saved-video-list > button { margin-bottom: 7px; border-radius: 5px; }
+.douyin-profile-cover { position: relative; height: 205px; overflow: hidden; color: white; background: linear-gradient(145deg, #43464e, #25272d 64%, #16171b); }.douyin-profile-cover > img { width: 100%; height: 100%; object-fit: cover; }.douyin-profile-shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.08), rgba(0,0,0,.25) 44%, rgba(0,0,0,.82)); }.douyin-profile-cover:not(.has-cover)::before { content: ""; position: absolute; width: 210px; height: 210px; right: -68px; top: -82px; border: 1px solid rgba(255,255,255,.08); border-radius: 50%; box-shadow: 0 0 0 34px rgba(255,255,255,.025), 0 0 0 72px rgba(255,255,255,.018); }
+.douyin-profile-identity { position: absolute; z-index: 2; left: 16px; right: 16px; bottom: 15px; display: grid; grid-template-columns: 68px minmax(0,1fr) auto; align-items: end; gap: 11px; }.douyin-profile-avatar { position: relative; width: 68px; height: 68px; display: grid; place-items: center; border: 2px solid white; border-radius: 50%; background: #202126; color: white; font-size: 21px; font-weight: 800; }.douyin-profile-avatar span { position: absolute; right: -1px; bottom: -1px; width: 21px; height: 21px; display: grid; place-items: center; border: 2px solid white; border-radius: 50%; background: var(--coral); font-size: 14px; }.douyin-profile-name { min-width: 0; display: flex; flex-direction: column; gap: 5px; padding-bottom: 4px; }.douyin-profile-name strong { font-size: 17px; }.douyin-profile-name span { color: rgba(255,255,255,.68); font-size: 9px; }.douyin-profile-identity > button { min-height: 36px; margin-bottom: 3px; padding: 0 13px; border: 1px solid rgba(255,255,255,.42); border-radius: 6px; background: rgba(0,0,0,.28); color: white; font-size: 9px; font-weight: 650; }
+.douyin-profile-summary { padding: 13px 16px 11px; border-bottom: 1px solid #ededed; background: white; }.douyin-profile-stats { display: flex; gap: 24px; }.douyin-profile-stats span { display: flex; align-items: baseline; gap: 4px; color: #85858b; font-size: 9px; }.douyin-profile-stats strong { color: #1e1e23; font-size: 15px; }.douyin-profile-summary > p { margin: 11px 0 0; color: #73737a; font-size: 10px; }
+.profile-content-tabs { position: sticky; z-index: 4; top: 0; grid-template-columns: repeat(4, 1fr); border-top: 0; border-bottom-color: #e6e6e6; }.profile-content-tabs button { min-height: 48px; font-size: 11px; }.profile-content-tabs button.active::after { left: 30%; right: 30%; height: 3px; }
+.profile-collection-tabs { display: flex; gap: 8px; padding: 9px 13px; overflow-x: auto; border-bottom: 1px solid #e8e8e8; background: white; scrollbar-width: none; }.profile-collection-tabs::-webkit-scrollbar { display: none; }.profile-collection-tabs button { flex: 0 0 auto; min-height: 32px; padding: 0 14px; border-radius: 6px; background: #f1f1f1; color: #727278; font-size: 9px; }.profile-collection-tabs button.active { background: #e5e5e5; color: #19191e; font-weight: 750; }
+.douyin-profile-content { min-height: 280px; background: #f5f5f5; }.profile-empty-state { min-height: 275px; display: grid; place-items: center; color: #a0a0a5; }.profile-empty-state strong { font-size: 12px; font-weight: 500; }
+.profile-video-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: white; }.profile-video-grid button, .profile-outfit-grid button { position: relative; padding: 0; overflow: hidden; background: #dedede; }.profile-video-grid button { aspect-ratio: 3 / 4; }.profile-video-grid img, .profile-outfit-grid img { width: 100%; height: 100%; object-fit: cover; }.profile-video-grid span, .profile-outfit-grid span { position: absolute; left: 7px; bottom: 7px; display: flex; align-items: center; gap: 4px; color: white; font-size: 8px; text-shadow: 0 1px 4px rgba(0,0,0,.8); }.profile-outfit-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px; padding: 2px; background: white; }.profile-outfit-grid button { aspect-ratio: 3 / 4; }.profile-outfit-grid span { padding: 5px 7px; border-radius: 999px; background: rgba(0,0,0,.55); text-shadow: none; }
 
 @keyframes scan { 0% { top: 10%; opacity: 0; } 12% { opacity: 1; } 88% { opacity: 1; } 100% { top: 87%; opacity: 0; } }
 @keyframes tag-in { from { opacity: 0; transform: translateY(5px) scale(.96); } to { opacity: 1; transform: none; } }

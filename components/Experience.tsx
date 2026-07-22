@@ -1524,25 +1524,52 @@ function MessagesScreen() {
 }
 
 function AssetLibraryScreen({ assets, videos, saved, onOpenAsset, onJumpOriginal }: { assets: GeneratedAsset[]; videos: VideoPreset[]; saved: string[]; onOpenAsset: (asset: GeneratedAsset) => void; onJumpOriginal: (videoId: string) => void }) {
-  const [tab, setTab] = useState<"assets" | "saved">("assets");
-  const demoAssets: GeneratedAsset[] = assets.length ? assets : videos.slice(0, 2).map((video, index) => ({
-    id: `preview-${video.id}`,
-    imageUrl: video.posterUrl,
-    video,
-    description: index === 0 ? "雪线之下的柔光，适合一套低饱和叠穿。" : "雨后霓虹给酒红皮衣加上第二层光。",
-    createdAt: index === 0 ? "今天" : "昨天",
-  }));
+  const [tab, setTab] = useState<"works" | "daily" | "collection" | "liked">("works");
+  const [collectionTab, setCollectionTab] = useState<"videos" | "outfits">("videos");
   const savedVideos = videos.filter((video) => saved.includes(video.id));
+  const coverAsset = assets[0] ?? null;
+  const emptyState = <div className="profile-empty-state"><strong>暂无</strong></div>;
+
   return (
     <section className="app-screen asset-screen">
-      <div className="profile-hero"><img src="/media/images/nalati-blue-dress.jpg" alt="个人主页背景" /><div className="profile-shade" /><div className="profile-avatar">镜<span>+</span></div><div className="profile-name"><strong>Scene Fitter</strong><span>场景穿搭创作者</span></div><button type="button">编辑主页</button></div>
-      <div className="profile-stats"><span><strong>12</strong>获赞</span><span><strong>{assets.length}</strong>AIGC 资产</span><span><strong>{saved.length}</strong>收藏视频</span><span><strong>8</strong>关注</span></div>
-      <div className="asset-tabs"><button className={tab === "assets" ? "active" : ""} type="button" onClick={() => setTab("assets")}><Images size={15} />我的穿搭</button><button className={tab === "saved" ? "active" : ""} type="button" onClick={() => setTab("saved")}><Bookmark size={15} />收藏视频</button></div>
-      {tab === "assets" ? (
-        <div className="asset-gallery">{demoAssets.map((asset) => <button key={asset.id} type="button" aria-label={`${asset.description} ${asset.createdAt}`} onClick={() => onOpenAsset(asset)}><img src={asset.imageUrl} alt="" /><span><Sparkles size={12} />{asset.createdAt}</span></button>)}</div>
-      ) : savedVideos.length ? (
-        <div className="saved-video-list">{savedVideos.map((video) => <button key={video.id} type="button" onClick={() => onJumpOriginal(video.id)}><img src={video.posterUrl} alt={video.title} /><div><strong>{video.location}</strong><p>{video.title}</p><span><Play size={12} />跳转原视频</span></div></button>)}</div>
-      ) : <div className="empty-state"><Bookmark size={28} /><strong>还没有收藏视频</strong><p>在首页点击收藏，原视频会出现在这里。</p></div>}
+      <div className={`douyin-profile-cover ${coverAsset ? "has-cover" : ""}`}>
+        {coverAsset && <img src={coverAsset.imageUrl} alt="个人主页背景" />}
+        <div className="douyin-profile-shade" />
+        <div className="douyin-profile-identity">
+          <div className="douyin-profile-avatar">镜<span>+</span></div>
+          <div className="douyin-profile-name"><strong>我的主页</strong><span>抖音号：未设置</span></div>
+          <button type="button">编辑主页</button>
+        </div>
+      </div>
+
+      <div className="douyin-profile-summary">
+        <div className="douyin-profile-stats"><span><strong>0</strong>获赞</span><span><strong>0</strong>关注</span><span><strong>0</strong>粉丝</span></div>
+        <p>点击添加介绍，让大家认识你</p>
+      </div>
+
+      <nav className="profile-content-tabs" aria-label="个人主页内容">
+        <button className={tab === "works" ? "active" : ""} type="button" onClick={() => setTab("works")}>作品</button>
+        <button className={tab === "daily" ? "active" : ""} type="button" onClick={() => setTab("daily")}>日常</button>
+        <button className={tab === "collection" ? "active" : ""} type="button" onClick={() => setTab("collection")}>收藏</button>
+        <button className={tab === "liked" ? "active" : ""} type="button" onClick={() => setTab("liked")}>喜欢</button>
+      </nav>
+
+      {tab === "collection" && (
+        <nav className="profile-collection-tabs" aria-label="收藏分类">
+          <button className={collectionTab === "videos" ? "active" : ""} type="button" onClick={() => setCollectionTab("videos")}>视频</button>
+          <button className={collectionTab === "outfits" ? "active" : ""} type="button" onClick={() => setCollectionTab("outfits")}>我的穿搭</button>
+        </nav>
+      )}
+
+      <div className="douyin-profile-content">
+        {tab !== "collection" && emptyState}
+        {tab === "collection" && collectionTab === "videos" && (savedVideos.length
+          ? <div className="profile-video-grid">{savedVideos.map((video) => <button key={video.id} type="button" onClick={() => onJumpOriginal(video.id)}><img src={video.posterUrl} alt={video.title} /><span><Play size={12} fill="currentColor" />{video.counts.likes}</span></button>)}</div>
+          : emptyState)}
+        {tab === "collection" && collectionTab === "outfits" && (assets.length
+          ? <div className="profile-outfit-grid">{assets.map((asset) => <button key={asset.id} type="button" aria-label={`${asset.description} ${asset.createdAt}`} onClick={() => onOpenAsset(asset)}><img src={asset.imageUrl} alt="" /><span><Sparkles size={12} />{asset.createdAt}</span></button>)}</div>
+          : emptyState)}
+      </div>
     </section>
   );
 }
