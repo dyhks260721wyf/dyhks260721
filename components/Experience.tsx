@@ -13,7 +13,6 @@ import {
   Grid2X2,
   Heart,
   Home,
-  ImagePlus,
   Images,
   MessageCircle,
   MoreHorizontal,
@@ -22,7 +21,6 @@ import {
   Play,
   Plus,
   RotateCcw,
-  Ruler,
   ScanFace,
   Search,
   Send,
@@ -41,13 +39,24 @@ import {
   WandSparkles,
   X,
 } from "lucide-react";
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import type { HotspotPreset, ProductPreset, VideoPreset } from "@/lib/content";
 
 type OpenSheet = "search" | "comments" | null;
-type EntrySource = "pause_tag" | "ai_analysis";
+type EntrySource = "pause_tag" | "comment_tab" | "ai_analysis";
 type CommentTab = "comments" | "analysis" | "tryon";
-type AppScreen = "feed" | "shop" | "messages" | "assets" | "publish";
+type AppScreen = "feed" | "friends" | "messages" | "assets" | "publish";
+
+type UserTryOnProfile = {
+  outfitStyle: string;
+  bodyType: string;
+  heightCm: number;
+  weightRange: string;
+  identityDataUrl: string | null;
+  useDemoIdentity: boolean;
+  consentAccepted: boolean;
+  updatedAt: string;
+};
 
 type GeneratedAsset = {
   id: string;
@@ -57,6 +66,9 @@ type GeneratedAsset = {
   createdAt: string;
 };
 
+const profileStorageKey = "scene-fit:user-profile:v1";
+const assetStorageKey = "scene-fit:generated-assets:v1";
+
 export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -64,16 +76,16 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
   const [selectedHotspot, setSelectedHotspot] = useState<HotspotPreset | null>(null);
   const [commentTab, setCommentTab] = useState<CommentTab>("comments");
   const [tryOn, setTryOn] = useState<{ open: boolean; source: EntrySource }>({ open: false, source: "pause_tag" });
-  const [introVisible, setIntroVisible] = useState(true);
   const [saved, setSaved] = useState<string[]>([]);
   const [screen, setScreen] = useState<AppScreen>("feed");
   const [assets, setAssets] = useState<GeneratedAsset[]>([]);
+  const [userProfile, setUserProfile] = useState<UserTryOnProfile | null>(null);
+  const [storageReady, setStorageReady] = useState(false);
   const [activeAsset, setActiveAsset] = useState<GeneratedAsset | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<ProductPreset | null>(null);
   const feedRef = useRef<HTMLDivElement>(null);
 
   const activeVideo = initialVideos[activeIndex] ?? initialVideos[0];
-  const allProducts = useMemo(() => initialVideos.flatMap((video) => video.products), [initialVideos]);
   const publishAsset = activeAsset ?? assets[0] ?? {
     id: `demo-${activeVideo.id}`,
     imageUrl: activeVideo.posterUrl,
@@ -81,6 +93,46 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
     description: `在${activeVideo.location}，把原视频的完整 Look 换到自己的形象上。`,
     createdAt: "刚刚",
   };
+
+  useEffect(() => {
+    try {
+      const rawProfile = localStorage.getItem(profileStorageKey);
+      if (rawProfile) setUserProfile(JSON.parse(rawProfile) as UserTryOnProfile);
+
+      const rawAssets = localStorage.getItem(assetStorageKey);
+      if (rawAssets) {
+        const persisted = JSON.parse(rawAssets) as Array<Omit<GeneratedAsset, "video"> & { videoId: string }>;
+        setAssets(persisted.flatMap((asset) => {
+          const video = initialVideos.find((item) => item.id === asset.videoId);
+          return video ? [{ ...asset, video }] : [];
+        }));
+      }
+    } catch {
+      localStorage.removeItem(profileStorageKey);
+      localStorage.removeItem(assetStorageKey);
+    } finally {
+      setStorageReady(true);
+    }
+  }, [initialVideos]);
+
+  useEffect(() => {
+    if (!storageReady) return;
+    try {
+      if (userProfile) localStorage.setItem(profileStorageKey, JSON.stringify(userProfile));
+    } catch {
+      // Storage can be unavailable in private browsing; the current session still works.
+    }
+  }, [storageReady, userProfile]);
+
+  useEffect(() => {
+    if (!storageReady) return;
+    try {
+      const persisted = assets.slice(0, 8).map(({ video, ...asset }) => ({ ...asset, videoId: video.id }));
+      localStorage.setItem(assetStorageKey, JSON.stringify(persisted));
+    } catch {
+      // Keep the in-memory asset if browser storage quota is reached.
+    }
+  }, [assets, storageReady]);
 
   useEffect(() => {
     setPaused(false);
@@ -117,7 +169,6 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
   }
 
   function changeScreen(next: AppScreen) {
-    setIntroVisible(false);
     setOpenSheet(null);
     setScreen(next);
     setActiveAsset(null);
@@ -156,6 +207,7 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
 
       <section className="device-frame" aria-label="场景化穿搭短视频体验">
         {screen === "feed" && <div className="top-tabs">
+          <button type="button">同城</button>
           <button type="button">关注</button>
           <button className="active" type="button">推荐</button>
           <button className="top-search" type="button" aria-label="搜索"><Search size={21} /></button>
@@ -180,7 +232,7 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
 
         {screen !== "feed" && (
           <div className="app-screen-layer">
-            {screen === "shop" && <ShopScreen products={allProducts} onOpenProduct={setSelectedProduct} />}
+            {screen === "friends" && <FriendsScreen videos={initialVideos} onJumpOriginal={jumpToOriginal} />}
             {screen === "messages" && <MessagesScreen />}
             {screen === "assets" && (activeAsset
               ? <AssetDetailScreen asset={activeAsset} onBack={() => setActiveAsset(null)} onPublish={() => changeScreen("publish")} onJumpOriginal={() => jumpToOriginal(activeAsset.video.id)} onOpenProduct={setSelectedProduct} />
@@ -201,7 +253,7 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
             tab={commentTab}
             onTabChange={setCommentTab}
             onClose={() => setOpenSheet(null)}
-            onTryOn={() => startTryOn("ai_analysis")}
+            onTryOn={startTryOn}
           />
         )}
 
@@ -209,7 +261,9 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
           <TryOnFlow
             video={activeVideo}
             entrySource={tryOn.source}
+            initialProfile={userProfile}
             onClose={() => setTryOn((value) => ({ ...value, open: false }))}
+            onSaveProfile={setUserProfile}
             onSaveAsset={saveAsset}
             onOpenProduct={setSelectedProduct}
             onPublish={(asset) => { saveAsset(asset); setTryOn((value) => ({ ...value, open: false })); setScreen("publish"); }}
@@ -218,8 +272,6 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
         )}
 
         {selectedProduct && <ProductDetail product={selectedProduct} onClose={() => setSelectedProduct(null)} />}
-
-        {introVisible && <IntroOverlay onStart={() => setIntroVisible(false)} />}
       </section>
     </main>
   );
@@ -283,7 +335,7 @@ function FeedSlide({
             </button>
           ))}
           <button className="try-on-float" type="button" onClick={(event) => { event.stopPropagation(); onTryOn(); }}>
-            <WandSparkles size={17} /> AI 上身
+            <WandSparkles size={17} /> 试试这套
           </button>
         </div>
       )}
@@ -317,7 +369,7 @@ function BottomNavigation({ active, onChange }: { active: AppScreen; onChange: (
   return (
     <nav className="bottom-nav" aria-label="主导航">
       <button className={active === "feed" ? "active" : ""} type="button" onClick={() => onChange("feed")}><Home size={17} /><span>首页</span></button>
-      <button className={active === "shop" ? "active" : ""} type="button" onClick={() => onChange("shop")}><Store size={17} /><span>商城</span></button>
+      <button className={active === "friends" ? "active" : ""} type="button" onClick={() => onChange("friends")}><UserRound size={17} /><span>朋友</span></button>
       <button className={`publish-button ${active === "publish" ? "active" : ""}`} type="button" aria-label="发布" onClick={() => onChange("publish")}><span><Plus size={20} /></span></button>
       <button className={active === "messages" ? "active" : ""} type="button" onClick={() => onChange("messages")}><Bell size={17} /><span>消息</span></button>
       <button className={active === "assets" ? "active" : ""} type="button" onClick={() => onChange("assets")}><User size={17} /><span>我</span></button>
@@ -377,7 +429,7 @@ function ProductCard({ product, onOpen }: { product: ProductPreset; onOpen?: () 
   );
 }
 
-function CommentsSheet({ video, tab, onTabChange, onClose, onTryOn }: { video: VideoPreset; tab: CommentTab; onTabChange: (tab: CommentTab) => void; onClose: () => void; onTryOn: () => void }) {
+function CommentsSheet({ video, tab, onTabChange, onClose, onTryOn }: { video: VideoPreset; tab: CommentTab; onTabChange: (tab: CommentTab) => void; onClose: () => void; onTryOn: (source: EntrySource) => void }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const comments = [
     ["山茶", "这个配色和背景太贴了，像从湖里取的颜色。", "18分钟前"],
@@ -392,7 +444,7 @@ function CommentsSheet({ video, tab, onTabChange, onClose, onTryOn }: { video: V
         <div className="comment-tabs">
           <button className={tab === "comments" ? "active" : ""} type="button" onClick={() => onTabChange("comments")}>评论 <span>{video.counts.comments}</span></button>
           <button className={tab === "analysis" ? "active" : ""} type="button" onClick={() => onTabChange("analysis")}><Sparkles size={14} /> AI 解析</button>
-          <button className={tab === "tryon" ? "active" : ""} type="button" onClick={() => onTabChange("tryon")}><WandSparkles size={14} /> AI 上身</button>
+          <button className={tab === "tryon" ? "active" : ""} type="button" onClick={() => onTabChange("tryon")}><WandSparkles size={14} /> AI 试穿</button>
           <button className="comment-close" type="button" onClick={onClose} aria-label="关闭"><X size={20} /></button>
         </div>
 
@@ -411,7 +463,7 @@ function CommentsSheet({ video, tab, onTabChange, onClose, onTryOn }: { video: V
             <div className="analysis-heading"><span><Sparkles size={16} /> AI 内容摘要</span><small>内容由 AI 辅助生成，请结合实际判断</small></div>
             <p className="analysis-summary">{video.analysis.summary}</p>
             <div className="analysis-tags">{video.analysis.tags.map((tag) => <span key={tag}>#{tag}</span>)}</div>
-            <button className="analysis-try-on" type="button" onClick={onTryOn}><span><WandSparkles size={20} />把这套穿到我身上</span><small>保留原场景与完整 Look</small></button>
+            <button className="analysis-try-on" type="button" onClick={() => onTryOn("ai_analysis")}><span><WandSparkles size={20} />试试这套</span><small>用我的形象预览原场景与完整 Look</small></button>
             <div className="question-list">
               <span>你可能想问</span>
               {video.analysis.questions.map((item) => (
@@ -429,7 +481,7 @@ function CommentsSheet({ video, tab, onTabChange, onClose, onTryOn }: { video: V
             <h3>把视频里的整套穿搭，<br />放进你的形象。</h3>
             <p>录入一张清晰人像和基础身材信息。生成时保留原场景、原穿搭与画面氛围。</p>
             <div className="tryon-tab-benefits"><span><ShieldCheck size={15} />人像授权确认</span><span><Images size={15} />结果存入 AIGC 相册</span></div>
-            <button className="flow-primary" type="button" onClick={onTryOn}><Camera size={18} />开始录入形象</button>
+            <button className="flow-primary" type="button" onClick={() => onTryOn("comment_tab")}><Camera size={18} />开始 AI 试穿</button>
           </div>
         )}
         {tab !== "tryon" && <div className="comment-input"><span>{tab === "analysis" ? "问 AI 或按住说话" : "留下你的评论"}</span><MoreHorizontal size={20} /><Send size={18} /></div>}
@@ -453,55 +505,139 @@ function IntroOverlay({ onStart }: { onStart: () => void }) {
   );
 }
 
-function TryOnFlow({ video, entrySource, onClose, onSaveAsset, onOpenProduct, onPublish, onJumpOriginal }: {
+function TryOnFlow({ video, entrySource, initialProfile, onClose, onSaveProfile, onSaveAsset, onOpenProduct, onPublish, onJumpOriginal }: {
   video: VideoPreset;
   entrySource: EntrySource;
+  initialProfile: UserTryOnProfile | null;
   onClose: () => void;
+  onSaveProfile: (profile: UserTryOnProfile) => void;
   onSaveAsset: (asset: GeneratedAsset) => void;
   onOpenProduct: (product: ProductPreset) => void;
   onPublish: (asset: GeneratedAsset) => void;
   onJumpOriginal: () => void;
 }) {
-  const [step, setStep] = useState(0);
-  const [identityFile, setIdentityFile] = useState<File | null>(null);
-  const [identityPreview, setIdentityPreview] = useState<string | null>(null);
-  const [useDemoIdentity, setUseDemoIdentity] = useState(true);
-  const [heightCm, setHeightCm] = useState(168);
-  const [weightRange, setWeightRange] = useState("50_60");
-  const [outfitStyle, setOutfitStyle] = useState("womenswear");
-  const [bodyType, setBodyType] = useState("hourglass");
-  const [consent, setConsent] = useState(false);
+  const [step, setStep] = useState(initialProfile ? 2 : 0);
+  const [identityDataUrl, setIdentityDataUrl] = useState<string | null>(initialProfile?.identityDataUrl ?? null);
+  const [useDemoIdentity, setUseDemoIdentity] = useState(initialProfile?.useDemoIdentity ?? true);
+  const [heightCm, setHeightCm] = useState(initialProfile?.heightCm ?? 168);
+  const [weightRange, setWeightRange] = useState(initialProfile?.weightRange ?? "50_60");
+  const [outfitStyle, setOutfitStyle] = useState(initialProfile?.outfitStyle ?? "womenswear");
+  const [bodyType, setBodyType] = useState(initialProfile?.bodyType ?? "hourglass");
+  const [consent, setConsent] = useState(initialProfile?.consentAccepted ?? false);
   const [generating, setGenerating] = useState(false);
+  const [generationStage, setGenerationStage] = useState(0);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [resultMode, setResultMode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [resultSaved, setResultSaved] = useState(false);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [captureFrames, setCaptureFrames] = useState<string[]>([]);
+  const cameraVideoRef = useRef<HTMLVideoElement>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
+  const faceDirections = ["正视镜头", "缓慢向左转", "缓慢向右转", "轻轻抬头", "轻轻低头"];
+  const generationMessages = ["正在识别场景与完整 Look", "正在匹配你的形象与身材比例", "正在调用图像模型生成画面"];
+
+  useEffect(() => {
+    if (!generating) return;
+    const timer = window.setInterval(() => setGenerationStage((current) => Math.min(current + 1, generationMessages.length - 1)), 2600);
+    return () => window.clearInterval(timer);
+  }, [generating, generationMessages.length]);
 
   useEffect(() => () => {
-    if (identityPreview) URL.revokeObjectURL(identityPreview);
-  }, [identityPreview]);
+    cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+  }, []);
 
-  function chooseFile(event: ChangeEvent<HTMLInputElement>) {
+  async function chooseFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
     if (file.size > 4 * 1024 * 1024) {
       setError("图片不能超过 4MB");
       return;
     }
-    if (identityPreview) URL.revokeObjectURL(identityPreview);
-    setIdentityFile(file);
-    setIdentityPreview(URL.createObjectURL(file));
-    setUseDemoIdentity(false);
-    setError(null);
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setError("请选择 JPEG、PNG 或 WebP 图片");
+      return;
+    }
+    try {
+      setIdentityDataUrl(await normalizeIdentityFile(file));
+      setCaptureFrames([]);
+      setUseDemoIdentity(false);
+      setError(null);
+    } catch {
+      setError("这张照片无法读取，请换一张重试");
+    }
+  }
+
+  async function startCamera() {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError("当前浏览器无法使用摄像头，请从相册选择照片");
+      return;
+    }
+    try {
+      stopCamera();
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 960 }, height: { ideal: 960 } }, audio: false });
+      cameraStreamRef.current = stream;
+      setCameraActive(true);
+      setCaptureFrames([]);
+      setUseDemoIdentity(false);
+      setError(null);
+      requestAnimationFrame(() => {
+        if (cameraVideoRef.current) {
+          cameraVideoRef.current.srcObject = stream;
+          void cameraVideoRef.current.play();
+        }
+      });
+    } catch {
+      setError("没有获得摄像头权限，请允许访问或从相册选择照片");
+    }
+  }
+
+  function stopCamera() {
+    cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+    cameraStreamRef.current = null;
+    setCameraActive(false);
+  }
+
+  async function captureFaceAngle() {
+    const videoElement = cameraVideoRef.current;
+    if (!videoElement || videoElement.videoWidth === 0) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = 720;
+    canvas.height = 720;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    const sourceSize = Math.min(videoElement.videoWidth, videoElement.videoHeight);
+    const sourceX = (videoElement.videoWidth - sourceSize) / 2;
+    const sourceY = (videoElement.videoHeight - sourceSize) / 2;
+    context.translate(canvas.width, 0);
+    context.scale(-1, 1);
+    context.drawImage(videoElement, sourceX, sourceY, sourceSize, sourceSize, 0, 0, canvas.width, canvas.height);
+    const nextFrames = [...captureFrames, canvas.toDataURL("image/jpeg", 0.84)];
+    setCaptureFrames(nextFrames);
+    if (nextFrames.length === faceDirections.length) {
+      setIdentityDataUrl(await combineIdentityFrames(nextFrames));
+      stopCamera();
+    }
   }
 
   async function generate(event: FormEvent) {
     event.preventDefault();
     if (!consent) { setError("请确认你有权使用这张人像"); return; }
     setGenerating(true);
+    setGenerationStage(0);
     setError(null);
 
     try {
+      onSaveProfile({
+        outfitStyle,
+        bodyType,
+        heightCm,
+        weightRange,
+        identityDataUrl,
+        useDemoIdentity,
+        consentAccepted: true,
+        updatedAt: new Date().toISOString(),
+      });
       const form = new FormData();
       form.set("videoId", video.id);
       form.set("heightCm", String(heightCm));
@@ -509,7 +645,7 @@ function TryOnFlow({ video, entrySource, onClose, onSaveAsset, onOpenProduct, on
       form.set("outfitStyle", outfitStyle);
       form.set("consentAccepted", "true");
       form.set("entrySource", entrySource);
-      if (identityFile && !useDemoIdentity) form.set("identityBoard", identityFile);
+      if (identityDataUrl && !useDemoIdentity) form.set("identityBoard", await dataUrlToFile(identityDataUrl, "identity-board.jpg"));
 
       const response = await fetch("/api/generate", { method: "POST", body: form });
       if (!response.ok) {
@@ -559,13 +695,14 @@ function TryOnFlow({ video, entrySource, onClose, onSaveAsset, onOpenProduct, on
     if (asset) onPublish(asset);
   }
 
-  const stepTitle = ["选择你的形象", "补充身材信息", "确认生成输入", "你的场景 Look"][step];
+  const stepTitle = ["录入你的形象", "补充身材信息", "确认生成内容", "你的场景 Look"][step];
+  const canStepBack = step > 0 && step < 3 && !(initialProfile && step === 2);
 
   return (
     <div className="flow-layer">
       <section className="try-flow">
         <header className="flow-header">
-          <button type="button" onClick={step > 0 && step < 3 ? () => setStep(step - 1) : onClose} aria-label="返回">{step > 0 && step < 3 ? <ArrowLeft size={21} /> : <X size={21} />}</button>
+          <button type="button" onClick={canStepBack ? () => setStep(step - 1) : onClose} aria-label={canStepBack ? "返回" : "关闭"}>{canStepBack ? <ArrowLeft size={21} /> : <X size={21} />}</button>
           <div><span>AI TRY-ON · {step + 1}/4</span><h3>{stepTitle}</h3></div>
           <div className="step-dots">{[0, 1, 2, 3].map((item) => <i key={item} className={item <= step ? "active" : ""} />)}</div>
         </header>
@@ -573,24 +710,31 @@ function TryOnFlow({ video, entrySource, onClose, onSaveAsset, onOpenProduct, on
         {step === 0 && (
           <div className="flow-body identity-step">
             <div className="reference-strip"><img src={video.posterUrl} alt="场景参考" /><div><span>已锁定场景与 Look</span><strong>{video.location}</strong><small>系统会保留原场景氛围和完整穿搭</small></div><Check size={18} /></div>
-            <div className="identity-grid">
-              <button className={useDemoIdentity ? "active" : ""} type="button" onClick={() => { setUseDemoIdentity(true); setError(null); }}>
-                <img src={video.posterUrl} alt="演示人物" /><span><Check size={15} /> 使用演示人物</span>
-              </button>
-              <label className={!useDemoIdentity ? "active" : ""}>
-                {identityPreview ? <img src={identityPreview} alt="我的人像预览" /> : <div><Camera size={28} /><span>上传正面人像</span><small>JPEG / PNG / WebP</small></div>}
-                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={chooseFile} />
-                {identityPreview && <span><Upload size={15} /> 已选择我的照片</span>}
-              </label>
+            <div className={`face-capture-stage ${cameraActive ? "is-camera" : ""}`}>
+              <div className="face-orbit" aria-label="人脸录入预览">
+                {cameraActive
+                  ? <video ref={cameraVideoRef} muted playsInline aria-label="摄像头实时预览" />
+                  : <img src={useDemoIdentity ? video.posterUrl : identityDataUrl ?? video.posterUrl} alt={useDemoIdentity ? "演示人物" : "已录入的人像"} />}
+                <span className="face-scan-line" />
+                <i className="face-corner corner-one" /><i className="face-corner corner-two" />
+              </div>
+              <div className="capture-direction">
+                <span>{cameraActive ? `动作 ${Math.min(captureFrames.length + 1, faceDirections.length)}/${faceDirections.length}` : useDemoIdentity ? "演示模式" : "形象已录入"}</span>
+                <strong>{cameraActive ? faceDirections[Math.min(captureFrames.length, faceDirections.length - 1)] : useDemoIdentity ? "使用当前视频人物体验完整链路" : "已保存全脸特征，可继续生成"}</strong>
+              </div>
+              <div className="face-progress" aria-label="录入进度">
+                {faceDirections.map((direction, index) => <span key={direction} className={index < captureFrames.length || (!cameraActive && !useDemoIdentity) ? "done" : index === captureFrames.length && cameraActive ? "active" : ""}>{index < captureFrames.length || (!cameraActive && !useDemoIdentity) ? <Check size={11} /> : index + 1}<small>{direction.replace("缓慢", "").replace("轻轻", "")}</small></span>)}
+              </div>
+              {cameraActive && <button className="capture-frame-button" disabled={captureFrames.length >= faceDirections.length} type="button" onClick={captureFaceAngle}><Camera size={18} />记录「{faceDirections[Math.min(captureFrames.length, faceDirections.length - 1)]}」</button>}
             </div>
             <div className="capture-actions">
-              <label><Camera size={17} />拍摄人脸<input type="file" accept="image/*" capture="user" onChange={chooseFile} /></label>
+              <button type="button" onClick={startCamera}><Camera size={17} />{cameraActive ? "重新录入" : "动态录入"}</button>
               <label><Upload size={17} />从相册选择<input type="file" accept="image/jpeg,image/png,image/webp" onChange={chooseFile} /></label>
             </div>
-            <div className="face-guide"><span><ScanFace size={17} />录入提示</span><div>{["正脸", "左脸", "右脸", "抬头", "低头"].map((item, index) => <i key={item} className={index === 0 && !useDemoIdentity ? "done" : ""}>{index === 0 && !useDemoIdentity && <Check size={11} />}{item}</i>)}</div></div>
+            <button className={`demo-identity-toggle ${useDemoIdentity ? "active" : ""}`} type="button" onClick={() => { stopCamera(); setUseDemoIdentity(true); setError(null); }}><CheckCircle2 size={16} />暂不录入，使用演示人物</button>
             <div className="privacy-note"><ShieldCheck size={17} /><p>仅上传本人或已获授权的人像；图片用于本次生成与个人 AIGC 相册，不用于身份识别。</p></div>
             {error && <p className="form-error">{error}</p>}
-            <button className="flow-primary" type="button" onClick={() => setStep(1)}>继续填写身材</button>
+            <button className="flow-primary" disabled={cameraActive || (!useDemoIdentity && !identityDataUrl)} type="button" onClick={() => setStep(1)}>继续填写身材</button>
           </div>
         )}
 
@@ -612,7 +756,7 @@ function TryOnFlow({ video, entrySource, onClose, onSaveAsset, onOpenProduct, on
               {[['under_50', '50kg 以下'], ['50_60', '50–60kg'], ['60_70', '60–70kg'], ['70_85', '70–85kg'], ['over_85', '85kg 以上']].map(([value, label]) => <button className={weightRange === value ? "active" : ""} key={value} type="button" onClick={() => setWeightRange(value)}>{label}</button>)}
             </div>
             <p className="profile-hint">身材信息只用于大致比例，不提供尺码或合身度判断。</p>
-            <button className="flow-primary" type="button" onClick={() => setStep(2)}>检查生成输入</button>
+            <button className="flow-primary" type="button" onClick={() => setStep(2)}>确认这些信息</button>
           </div>
         )}
 
@@ -621,24 +765,28 @@ function TryOnFlow({ video, entrySource, onClose, onSaveAsset, onOpenProduct, on
             <div className="reference-cards">
               <article><img src={video.posterUrl} alt="场景" /><span>01 / 场景</span><strong>{video.location}</strong></article>
               <article><img src={video.posterUrl} alt="完整 Look" /><span>02 / LOOK</span><strong>{video.products.length} 件完整穿搭</strong></article>
-              <article><img src={useDemoIdentity ? video.posterUrl : identityPreview ?? video.posterUrl} alt="人物" /><span>03 / 人物</span><strong>{useDemoIdentity ? "演示人物" : "我的照片"}</strong></article>
+              <article><img src={useDemoIdentity ? video.posterUrl : identityDataUrl ?? video.posterUrl} alt="人物" /><span>03 / 人物</span><strong>{useDemoIdentity ? "演示人物" : "我的形象"}</strong></article>
             </div>
+            {initialProfile && <div className="profile-reuse-note"><CheckCircle2 size={18} /><div><strong>已使用你上次保存的形象</strong><span>以后从三个入口进入，都可以直接生成</span></div><button type="button" onClick={() => setStep(0)}>修改</button></div>}
             <div className="profile-summary"><span>{outfitStyle === "womenswear" ? "女士穿搭" : "男士穿搭"}</span><span>{bodyType === "hourglass" ? "沙漏型" : bodyType === "triangle" ? "倒三角" : bodyType === "pear" ? "梨型" : "直筒型"}</span><span>{heightCm} cm</span><span>{weightRange.replace("_", "–")} kg</span></div>
             <label className="consent-row"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><i>{consent && <Check size={14} />}</i><span>我确认使用本人或已获授权的人像，并同意将图片发送至图像生成服务处理。</span></label>
             {error && <p className="form-error">{error}</p>}
             <button className="flow-primary generate-button" disabled={generating} type="submit">{generating ? <><span className="spinner" />正在融合场景与 Look</> : <><WandSparkles size={18} />生成我的场景 Look</>}</button>
-            <small className="generation-note">服务端通过兼容网关调用 GPT Image 2；未配置密钥时返回本地演示结果。</small>
+            {generating && <div className="generation-progress" role="status" aria-live="polite"><div><Sparkles size={18} /><span><strong>{generationMessages[generationStage]}</strong><small>识图和生图可能需要约 1–2 分钟，请保持页面打开</small></span></div><div className="generation-track"><i style={{ width: `${(generationStage + 1) / generationMessages.length * 100}%` }} /></div></div>}
+            <small className="generation-note">后端先由 gpt-5.6-sol 识图并组织指令，再调用 image 模型完成画面。</small>
           </form>
         )}
 
         {step === 3 && resultUrl && (
           <div className="result-step">
             <img className="result-image" src={resultUrl} alt="生成的场景穿搭结果" />
-            <div className="result-topline"><span><Sparkles size={14} /> {resultMode === "compatible-gateway" ? "GPT Image 2 生成" : resultMode === "gateway-fallback" ? "网关超时 · 演示结果" : "本地演示结果"}</span><small>{video.location}</small></div>
+            <div className="result-topline"><span><Sparkles size={14} /> {resultMode === "compatible-gateway" ? "AI 场景试穿" : resultMode === "gateway-fallback" ? "网关超时 · 演示结果" : "本地演示结果"}</span><small>{video.location}</small></div>
             <div className="result-panel">
+              <span className="result-emotion">这一刻，场景终于有了你的样子</span>
               <h4>你已经在这个场景里了。</h4>
-              <p>{`画面保留了${video.location}的氛围与原视频 Look，让人物更自然地融入场景。`}</p>
-              <div className="result-actions"><button type="button" onClick={saveResult}>{resultSaved ? <CheckCircle2 size={18} /> : <Bookmark size={18} />}{resultSaved ? "已收藏" : "收藏图片"}</button><button type="button" onClick={downloadResult}><Download size={18} />下载</button><button type="button" onClick={() => setStep(2)}><RotateCcw size={18} />再生成</button></div>
+              <p>{`画面保留了${video.location}的光线、氛围与原视频完整 Look，让你的形象自然进入同一段故事。`}</p>
+              <button className={`save-result-block ${resultSaved ? "saved" : ""}`} type="button" onClick={saveResult}><span>{resultSaved ? <CheckCircle2 size={20} /> : <Bookmark size={20} />}<strong>{resultSaved ? "已收藏到我的穿搭" : "收藏图片"}</strong></span><small>{resultSaved ? "可前往「我–收藏–我的穿搭」查看" : "收藏后可进入个人页发布作品"}</small></button>
+              <div className="result-actions"><button type="button" onClick={downloadResult}><Download size={18} />保存本地</button><button type="button" onClick={() => setStep(2)}><RotateCcw size={18} />再生成</button><button type="button" onClick={onClose}><Play size={18} />继续刷</button></div>
               <div className="result-publish-row"><button type="button" onClick={publishResult}><Sparkles size={18} />一键发布</button><button type="button" onClick={onJumpOriginal}><Music2 size={17} />原视频 / 原声</button></div>
               <div className="result-products-heading"><div><span>搭配同款</span><strong>把画面变成可买的 Look</strong></div><ShoppingCart size={20} /></div>
               <div className="result-product-grid">{video.products.map((product) => <ProductCard key={product.id} product={product} onOpen={() => onOpenProduct(product)} />)}</div>
@@ -661,20 +809,73 @@ function blobToDataUrl(blob: Blob) {
   });
 }
 
+async function dataUrlToFile(dataUrl: string, fileName: string) {
+  const response = await fetch(dataUrl);
+  const blob = await response.blob();
+  return new File([blob], fileName, { type: blob.type || "image/jpeg" });
+}
+
+function loadDataUrlImage(dataUrl: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("IMAGE_LOAD_FAILED"));
+    image.src = dataUrl;
+  });
+}
+
+async function normalizeIdentityFile(file: File) {
+  const source = await blobToDataUrl(file);
+  const image = await loadDataUrlImage(source);
+  const maxEdge = 960;
+  const scale = Math.min(1, maxEdge / Math.max(image.naturalWidth, image.naturalHeight));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("CANVAS_UNAVAILABLE");
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", 0.84);
+}
+
+async function combineIdentityFrames(frames: string[]) {
+  const images = await Promise.all(frames.map(loadDataUrlImage));
+  const canvas = document.createElement("canvas");
+  canvas.width = 1080;
+  canvas.height = 720;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("CANVAS_UNAVAILABLE");
+  context.fillStyle = "#101014";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  const cells = [
+    [0, 0], [360, 0], [720, 0], [180, 360], [540, 360],
+  ];
+  images.forEach((image, index) => {
+    const [x, y] = cells[index];
+    context.drawImage(image, x, y, 360, 360);
+  });
+  return canvas.toDataURL("image/jpeg", 0.82);
+}
+
 function ScreenHeader({ eyebrow, title, action }: { eyebrow: string; title: string; action?: React.ReactNode }) {
   return <header className="screen-header"><div><span>{eyebrow}</span><h2>{title}</h2></div>{action}</header>;
 }
 
-function ShopScreen({ products, onOpenProduct }: { products: ProductPreset[]; onOpenProduct: (product: ProductPreset) => void }) {
-  const [query, setQuery] = useState("");
-  const visibleProducts = products.filter((product) => `${product.name}${product.category}${product.note}`.includes(query));
+function FriendsScreen({ videos, onJumpOriginal }: { videos: VideoPreset[]; onJumpOriginal: (videoId: string) => void }) {
   return (
-    <section className="app-screen shop-screen">
-      <ScreenHeader eyebrow="SCENE SHOP" title="从场景找到同款" action={<button type="button" aria-label="购物袋"><ShoppingBag size={20} /></button>} />
-      <label className="screen-search"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索单品、场景或风格" /></label>
-      <div className="category-row">{["全部", "外套", "裤装", "配饰", "帽子"].map((item) => <button type="button" key={item} onClick={() => setQuery(item === "全部" ? "" : item)}>{item}</button>)}</div>
-      <div className="shop-editorial"><img src="/media/images/museum-look.jpg" alt="建筑感通勤搭配" /><div><span>SCENE EDIT 03</span><strong>把建筑的硬线条，穿进通勤。</strong><small>本周 7 件场景单品</small></div></div>
-      <div className="screen-product-grid">{visibleProducts.map((product) => <ProductCard key={product.id} product={product} onOpen={() => onOpenProduct(product)} />)}</div>
+    <section className="app-screen friends-screen">
+      <ScreenHeader eyebrow="FRIENDS" title="朋友" action={<button type="button" aria-label="添加朋友"><UserRound size={20} /></button>} />
+      <div className="friends-recent"><span>最近更新</span><div>{videos.map((video) => <button key={video.id} type="button" onClick={() => onJumpOriginal(video.id)}><i><img src={video.posterUrl} alt="" /></i><small>{video.author.slice(0, 4)}</small></button>)}</div></div>
+      <div className="friend-feed">
+        {videos.slice(0, 2).map((video, index) => <article key={video.id}>
+          <header><div className="friend-avatar">{video.avatarLabel}</div><div><strong>{video.author}</strong><span>{index === 0 ? "12 分钟前" : "1 小时前"} · {video.location}</span></div><button type="button" aria-label={`查看 ${video.author} 的更多操作`}><MoreHorizontal size={19} /></button></header>
+          <button className="friend-media" type="button" onClick={() => onJumpOriginal(video.id)}><img src={video.posterUrl} alt={video.title} /><span><Play size={18} fill="currentColor" />看原视频</span></button>
+          <p>{video.title}</p>
+          <footer><button type="button"><Heart size={18} />喜欢</button><button type="button"><MessageCircle size={18} />评论</button><button type="button"><Share2 size={18} />分享</button></footer>
+        </article>)}
+      </div>
     </section>
   );
 }
@@ -708,9 +909,10 @@ function AssetLibraryScreen({ assets, videos, saved, onOpenAsset, onJumpOriginal
     <section className="app-screen asset-screen">
       <div className="profile-hero"><img src="/media/images/alpine-look.jpg" alt="个人主页背景" /><div className="profile-shade" /><div className="profile-avatar">镜<span>+</span></div><div className="profile-name"><strong>Scene Fitter</strong><span>场景穿搭创作者</span></div><button type="button">编辑主页</button></div>
       <div className="profile-stats"><span><strong>12</strong>获赞</span><span><strong>{assets.length}</strong>AIGC 资产</span><span><strong>{saved.length}</strong>收藏视频</span><span><strong>8</strong>关注</span></div>
-      <div className="asset-tabs"><button className={tab === "assets" ? "active" : ""} type="button" onClick={() => setTab("assets")}><Images size={15} />我的穿搭</button><button className={tab === "saved" ? "active" : ""} type="button" onClick={() => setTab("saved")}><Bookmark size={15} />收藏</button></div>
+      <div className="profile-content-tabs"><button type="button">作品</button><button type="button">日常</button><button className="active" type="button">收藏</button><button type="button">喜欢</button></div>
+      <div className="asset-tabs"><button className={tab === "saved" ? "active" : ""} type="button" onClick={() => setTab("saved")}><Bookmark size={15} />视频</button><button className={tab === "assets" ? "active" : ""} type="button" onClick={() => setTab("assets")}><Images size={15} />我的穿搭</button></div>
       {tab === "assets" ? (
-        <div className="asset-gallery">{demoAssets.map((asset) => <button key={asset.id} type="button" onClick={() => onOpenAsset(asset)}><img src={asset.imageUrl} alt={asset.description} /><span><Sparkles size={12} />{asset.createdAt}</span></button>)}</div>
+        <div className="asset-gallery">{demoAssets.map((asset) => <button key={asset.id} type="button" aria-label={`${asset.description} ${asset.createdAt}`} onClick={() => onOpenAsset(asset)}><img src={asset.imageUrl} alt="" /><span><Sparkles size={12} />{asset.createdAt}</span></button>)}</div>
       ) : savedVideos.length ? (
         <div className="saved-video-list">{savedVideos.map((video) => <button key={video.id} type="button" onClick={() => onJumpOriginal(video.id)}><img src={video.posterUrl} alt={video.title} /><div><strong>{video.location}</strong><p>{video.title}</p><span><Play size={12} />跳转原视频</span></div></button>)}</div>
       ) : <div className="empty-state"><Bookmark size={28} /><strong>还没有收藏视频</strong><p>在首页点击收藏，原视频会出现在这里。</p></div>}
