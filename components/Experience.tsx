@@ -1349,11 +1349,10 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
                 <button className={`save-result-block ${activeVersion.saved ? "saved" : ""}`} type="button" onClick={saveResult}><span>{activeVersion.saved ? <CheckCircle2 size={20} /> : <Bookmark size={20} />}<strong>{activeVersion.saved ? "这张已收藏到我的穿搭" : "收藏当前图片"}</strong></span><small>{activeVersion.saved ? "当前图片已保存，可继续生成新的效果" : "收藏后可在我的穿搭中查看和发布"}</small></button>
                 <div className="result-actions"><button type="button" onClick={downloadResult}><Download size={18} />保存本地</button><button type="button" onClick={() => setStep(2)}><RotateCcw size={18} />重新设定</button><button type="button" onClick={onClose}><Play size={18} />继续刷</button></div>
                 <div className="result-publish-row"><button type="button" onClick={publishResult}><Sparkles size={18} />一键发布</button><button type="button" onClick={onJumpOriginal}><Music2 size={17} />原视频 / 原声</button></div>
-                <div className="result-products-heading"><div><span>{video.userUploaded ? "Luna 识别相似款" : "搭配同款"}</span><strong>把画面变成可买的 Look</strong></div><ShoppingCart size={20} /></div>
+                <div className="result-products-heading"><strong>购买相似商品</strong><ShoppingCart size={20} /></div>
                 {activeProducts.length > 0
-                  ? <><div className="result-product-grid">{activeProducts.map((product) => <ProductCard key={product.id} product={product} onOpen={() => onOpenProduct(product)} />)}</div><button className="shop-look" type="button" onClick={() => onOpenProduct(activeProducts[0])}><ShoppingBag size={18} />查看这套 Look 的 {activeProducts.length} 件商品</button></>
+                  ? <div className="result-product-grid">{activeProducts.map((product) => <ProductCard key={product.id} product={product} onOpen={() => onOpenProduct(product)} />)}</div>
                   : <div className="product-analysis-empty"><Search size={19} /><div><strong>这一帧没有识别到清晰单品</strong><span>{activeVersion.productStatus === "failed" ? "商品识别暂时未完成，生成图片仍可正常收藏" : "可以返回视频，换一帧人物与穿搭更清晰的画面"}</span></div></div>}
-                <button className="back-feed" type="button" onClick={onClose}>返回继续刷视频</button>
               </div>
             </div>
             <section className="revision-float" aria-label="继续修改图片">

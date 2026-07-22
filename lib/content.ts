@@ -48,7 +48,7 @@ const islandImage = "/media/images/island-summer-look.jpg";
 
 export const contentManifest: { schemaVersion: "1"; contentVersion: string; videos: VideoPreset[] } = {
   schemaVersion: "1",
-  contentVersion: "2026-07-22.2",
+  contentVersion: "2026-07-23.1",
   videos: [
     {
       id: "nalati-blue-dress",
@@ -69,6 +69,10 @@ export const contentManifest: { schemaVersion: "1"; contentVersion: string; vide
       products: [
         { id: "nalati-dress-01", name: "钴蓝大摆度假长裙", category: "连衣裙", priceLabel: "¥699", imageUrl: nalatiImage, imagePosition: "52% 65%", note: "高饱和裙摆与草原、溪流形成强对比" },
         { id: "nalati-hat-01", name: "驼色宽檐草编帽", category: "帽子", priceLabel: "¥169", imageUrl: nalatiImage, imagePosition: "51% 41%", note: "暖色配饰中和蓝裙与天空的冷色调" },
+        { id: "nalati-dress-02", name: "湖蓝收腰吊带长裙", category: "连衣裙", priceLabel: "¥529", imageUrl: nalatiImage, imagePosition: "50% 58%", note: "轻量裙摆保留草原旅拍的明快色彩" },
+        { id: "nalati-skirt-01", name: "宝蓝高腰大摆半身裙", category: "半身裙", priceLabel: "¥399", imageUrl: nalatiImage, imagePosition: "48% 72%", note: "同色系替代款，日常搭配更灵活" },
+        { id: "nalati-top-01", name: "水蓝刺绣收腰上衣", category: "上衣", priceLabel: "¥259", imageUrl: nalatiImage, imagePosition: "51% 51%", note: "保留原造型的腰线与清爽层次" },
+        { id: "nalati-hat-02", name: "浅麦色度假遮阳帽", category: "帽子", priceLabel: "¥129", imageUrl: nalatiImage, imagePosition: "48% 38%", note: "同材质相似款，适合草原与海边场景" },
       ],
       analysis: {
         summary: "钴蓝大摆裙是画面的绝对焦点，旋转时形成有生命力的放射轮廓；草编帽补入暖色和旅行感，背景的草地、溪流与蓝天让这套 Look 很适合草原打卡。",
@@ -99,6 +103,10 @@ export const contentManifest: { schemaVersion: "1"; contentVersion: string; vide
       products: [
         { id: "guilin-top-01", name: "水墨花卉薄纱上衣", category: "上衣", priceLabel: "¥329", imageUrl: guilinImage, imagePosition: "51% 45%", note: "柔软廓形呼应山水的层叠雾感" },
         { id: "guilin-skirt-01", name: "水墨花卉垂感长裙", category: "半身裙", priceLabel: "¥459", imageUrl: guilinImage, imagePosition: "49% 77%", note: "同花色套装拉长纵向比例" },
+        { id: "guilin-set-01", name: "新中式晕染两件套", category: "套装", priceLabel: "¥739", imageUrl: guilinImage, imagePosition: "50% 60%", note: "低饱和花色与山景色调自然衔接" },
+        { id: "guilin-top-02", name: "茶棕印花修身长袖", category: "上衣", priceLabel: "¥289", imageUrl: guilinImage, imagePosition: "47% 43%", note: "修身剪裁让繁复印花更显利落" },
+        { id: "guilin-pants-01", name: "烟茶色垂感阔腿裤", category: "裤装", priceLabel: "¥359", imageUrl: guilinImage, imagePosition: "52% 80%", note: "宽松裤型适合酒店与山水旅拍" },
+        { id: "guilin-bracelet-01", name: "温润白玉细条手镯", category: "配饰", priceLabel: "¥199", imageUrl: guilinImage, imagePosition: "41% 39%", note: "小面积亮色提升新中式造型的精致感" },
       ],
       analysis: {
         summary: "上衣和长裙使用同一组低饱和水墨花色，人物与窗外喀斯特山景形成近似的色彩层次。轻薄面料和舒展动作让室内取景不显沉闷。",
@@ -133,6 +141,8 @@ export const contentManifest: { schemaVersion: "1"; contentVersion: string; vide
         { id: "island-top-01", name: "奶油白镂空针织上衣", category: "上衣", priceLabel: "¥269", imageUrl: islandImage, imagePosition: "52% 54%", note: "轻透层次适合叠穿泳装" },
         { id: "island-shorts-01", name: "炭黑低腰牛仔短裤", category: "裤装", priceLabel: "¥299", imageUrl: islandImage, imagePosition: "54% 73%", note: "深色下装压住全身浅色单品" },
         { id: "island-bag-01", name: "奶油色钩针托特包", category: "包袋", priceLabel: "¥199", imageUrl: islandImage, imagePosition: "27% 60%", note: "呼应上衣纹理，适合轻量沙滩物品" },
+        { id: "island-top-02", name: "波点系带海边上衣", category: "上衣", priceLabel: "¥219", imageUrl: islandImage, imagePosition: "52% 59%", note: "细小波点保留轻盈的海岛度假感" },
+        { id: "island-bag-02", name: "米白网眼沙滩包", category: "包袋", priceLabel: "¥159", imageUrl: islandImage, imagePosition: "25% 57%", note: "容量轻巧，材质与草帽形成呼应" },
       ],
       analysis: {
         summary: "草帽、镂空针织和钩针包形成统一的自然材质语言，黑色短裤提供清晰腰线。浅色上装在强日照与蓝色海面前保持轻盈，适合海岛步行和近景拍摄。",
