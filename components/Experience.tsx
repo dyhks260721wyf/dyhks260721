@@ -115,6 +115,7 @@ const poseOptions: Array<{ value: PoseStyle; label: string; hint: string }> = [
   { value: "glance", label: "氛围回眸", hint: "转身看向镜头" },
   { value: "editorial", label: "时尚大片", hint: "不对称镜头姿势" },
 ];
+const bodyTypeOptions = [["pear", "梨形"], ["triangle", "倒三角形"], ["hourglass", "沙漏型"], ["rectangle", "H 型"], ["apple", "苹果型"]] as const;
 const legacyWeightMidpoints: Record<string, number> = { under_50: 47, "50_60": 55, "60_70": 65, "70_85": 77, over_85: 90 };
 
 export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) {
@@ -1216,6 +1217,8 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
   const stepTitle = ["录入我的形象", "补充身材信息", "确认生成内容", "你的场景 Look"][step];
   const canStepBack = step > 0 && step < 3 && !(hasSavedIdentity && step === 2);
   const floatingState = generating ? "working" : error ? "failed" : "complete";
+  const selectedBodyTypeLabel = bodyTypeOptions.find(([value]) => value === bodyType)?.[1] ?? "沙漏型";
+  const selectedPoseLabel = poseOptions.find((option) => option.value === poseStyle)?.label ?? "自然抓拍";
 
   if (minimized) {
     return (
@@ -1224,6 +1227,7 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
         <span className="generation-float-copy">
           <strong>{floatingState === "working" ? "正在生成场景 Look" : floatingState === "complete" ? "你的新 Look 已生成" : "生成遇到问题"}</strong>
           <small>{floatingState === "working" ? generationStatusMessage ?? generationMessages[generationStage] : floatingState === "complete" ? `${resultVersions.length} 张照片 · 点击查看` : `${error ?? "点击返回查看详情"}`}</small>
+          {floatingState === "working" && <span className="generation-float-track"><i style={{ width: `${(generationStage + 1) / generationMessages.length * 100}%` }} /></span>}
         </span>
         <ChevronRight size={17} />
       </button>
@@ -1275,7 +1279,7 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
             <div className="segmented"><button className={outfitStyle === "womenswear" ? "active" : ""} type="button" onClick={() => setOutfitStyle("womenswear")}>女士穿搭</button><button className={outfitStyle === "menswear" ? "active" : ""} type="button" onClick={() => setOutfitStyle("menswear")}>男士穿搭</button></div>
             <label className="field-label">身材类型</label>
             <div className="body-type-grid">
-              {[["pear", "梨形"], ["triangle", "倒三角形"], ["hourglass", "沙漏型"], ["rectangle", "H 型"], ["apple", "苹果型"]].map(([value, label]) => (
+              {bodyTypeOptions.map(([value, label]) => (
                 <button className={bodyType === value ? "active" : ""} key={value} type="button" onClick={() => setBodyType(value)}><span className={`body-shape shape-${value}`}><UserRound size={28} /></span><strong>{label}</strong>{bodyType === value && <CheckCircle2 size={13} />}</button>
               ))}
             </div>
@@ -1302,23 +1306,42 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
 
         {step === 2 && (
           <form className="flow-body confirm-step" onSubmit={generate}>
-            {hasSavedIdentity && <div className="profile-reuse-note"><CheckCircle2 size={18} /><div><strong>已使用你上次保存的形象</strong></div><button type="button" onClick={() => setStep(0)}>修改</button></div>}
-            <section className="generation-mode-section" aria-labelledby="generation-mode-title">
-              <header><div><span>RENDER MODE</span><strong id="generation-mode-title">选择生成方式</strong></div><small>生成中可以收起继续刷</small></header>
+            <section className="confirm-section confirm-profile-section" aria-labelledby="confirm-profile-title">
+              <header className="confirm-section-heading"><strong id="confirm-profile-title">信息确认</strong><span>检查刚刚录入的内容</span></header>
+              <div className="confirm-profile-card">
+                <div className="confirm-identity-summary">
+                  <span className="confirm-identity-thumb">{identityDataUrl && <img src={identityDataUrl} alt="刚刚录入的正脸" />}</span>
+                  <div><strong>我的形象</strong><small>已录入 5 个角度</small></div>
+                  <button type="button" onClick={() => setStep(0)}>修改</button>
+                </div>
+                <div className="confirm-body-summary">
+                  <header><div><strong>身材信息</strong><small>{selectedBodyTypeLabel}</small></div><button type="button" onClick={() => setStep(1)}>修改</button></header>
+                  <div><span>{outfitStyle === "menswear" ? "男士穿搭" : "女士穿搭"}</span><span>{heightCm} cm</span><span>{weightKg} kg</span><span>{selectedPoseLabel}</span></div>
+                </div>
+              </div>
+            </section>
+            <section className="confirm-section generation-mode-section" aria-labelledby="generation-mode-title">
+              <header className="confirm-section-heading"><strong id="generation-mode-title">选择生成方式</strong></header>
               <div className="generation-mode-selector" role="radiogroup" aria-label="生成方式">
                 <button className={generationMode === "fast" ? "active" : ""} type="button" role="radio" aria-checked={generationMode === "fast"} disabled={generating} onClick={() => setGenerationMode("fast")}>
-                  <i><Zap size={16} /></i><span><em>FAST / 01</em><strong>快速生成</strong><small>Seedream 直接生成</small></span><b>约 1 分钟</b><div className="mode-meter"><u /><u /><u /></div>
+                  <i><Zap size={16} /></i><span><strong>快速生成</strong><small>Seedream 直接生成，适合快速预览效果</small></span><b>约 1 分钟</b><div className="mode-meter"><u /><u /><u /></div>
                 </button>
                 <button className={generationMode === "refined" ? "active" : ""} type="button" role="radio" aria-checked={generationMode === "refined"} disabled={generating} onClick={() => setGenerationMode("refined")}>
-                  <i><Sparkles size={16} /></i><span><em>FINE / 03</em><strong>精细生成</strong><small>Sol 分析并调用 image2</small></span><b>约 2～3 分钟</b><div className="mode-meter"><u /><u /><u /></div>
+                  <i><Sparkles size={16} /></i><span><strong>精细生成</strong><small>Sol 分析并调用 image2，适合高质量出图</small></span><b>约 2～3 分钟</b><div className="mode-meter"><u /><u /><u /></div>
                 </button>
               </div>
             </section>
-            <label className="consent-row"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><i>{consent && <Check size={14} />}</i><span>我确认使用本人或已获授权的人像，并同意将图片发送至图像生成服务处理。</span></label>
-            {error && <p className="form-error">{error}</p>}
-            <button className={`flow-primary generate-button mode-${generationMode}`} disabled={generating} type="submit">{generating ? <><span className="spinner" />正在融合场景与 Look</> : <>{generationMode === "fast" ? <Zap size={18} /> : <WandSparkles size={18} />}{generationMode === "fast" ? "快速生成场景 Look" : "精细生成场景 Look"}</>}</button>
-            {generating && <div className="generation-progress" role="status" aria-live="polite"><div><Sparkles size={18} /><span><strong>{generationStatusMessage ?? generationMessages[generationStage]}</strong><small>生图耗时可能较长；未返回明确错误时会持续等待</small></span></div><div className="generation-track"><i style={{ width: `${(generationStage + 1) / generationMessages.length * 100}%` }} /></div><button className="minimize-generation" type="button" onClick={minimizeGeneration}><Minimize2 size={15} />收起，继续刷视频</button></div>}
-            <small className="generation-note">{generationMode === "fast" ? "Seedream 直接生成，适合快速预览穿搭效果。" : "Sol 会精细分析全部要求，并在任务内调用 image2 生成。"}</small>
+            <section className="confirm-section consent-section" aria-labelledby="consent-title">
+              <header className="confirm-section-heading"><strong id="consent-title">安全确认</strong></header>
+              <label className="consent-row"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><i>{consent && <Check size={14} />}</i><span><strong>我已确认使用本人或已获授权的人像</strong><small>图片仅用于本次 AIGC 生成，并发送至图像生成服务处理。</small></span></label>
+            </section>
+            <section className="confirm-section generate-action-section" aria-labelledby="generate-action-title">
+              <header className="confirm-section-heading"><strong id="generate-action-title">开始生成</strong></header>
+              <div className="background-generation-tip"><Minimize2 size={17} /><span><strong>生成后可收起继续刷</strong><small>任务会变成视频旁的进度浮层，完成后提醒你查看。</small></span></div>
+              {error && <p className="form-error">{error}</p>}
+              <button className={`flow-primary generate-button mode-${generationMode}`} disabled={generating || !consent} type="submit">{generating ? <><span className="spinner" />正在融合场景与 Look</> : <>{generationMode === "fast" ? <Zap size={18} /> : <WandSparkles size={18} />}{generationMode === "fast" ? "快速生成场景 Look" : "精细生成场景 Look"}</>}</button>
+              {generating && <div className="generation-progress" role="status" aria-live="polite"><div><Sparkles size={18} /><span><strong>{generationStatusMessage ?? generationMessages[generationStage]}</strong><small>生图耗时可能较长；未返回明确错误时会持续等待</small></span></div><div className="generation-track"><i style={{ width: `${(generationStage + 1) / generationMessages.length * 100}%` }} /></div><button className="minimize-generation" type="button" onClick={minimizeGeneration}><Minimize2 size={15} />收起，继续刷视频</button></div>}
+            </section>
           </form>
         )}
 
