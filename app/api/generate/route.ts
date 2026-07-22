@@ -89,6 +89,7 @@ export async function POST(request: Request) {
     const poseStyle = String(form.get("poseStyle") ?? "candid");
     const outfitStyle = String(form.get("outfitStyle") ?? "womenswear");
     const consentAccepted = String(form.get("consentAccepted")) === "true";
+    const sceneFrame = form.get("sceneFrame");
     const identity = form.get("identityBoard");
     const revision = form.get("revisionImage");
     const revisionPrompt = String(form.get("revisionPrompt") ?? "").trim();
@@ -109,7 +110,15 @@ export async function POST(request: Request) {
       return Response.json({ code: "REVISION_TOO_LONG", message: "修改要求请控制在 300 字以内", requestId }, { status: 400 });
     }
 
-    const sceneBytes = await readFile(publicFile(video.posterUrl));
+    let sceneBytes: Buffer;
+    if (sceneFrame instanceof File && sceneFrame.size > 0) {
+      if (sceneFrame.size > 8 * 1024 * 1024 || sceneFrame.type !== "image/jpeg") {
+        return Response.json({ code: "INVALID_SCENE_FRAME", message: "视频暂停帧需为 JPEG，且不超过 8MB", requestId }, { status: 400 });
+      }
+      sceneBytes = Buffer.from(await sceneFrame.arrayBuffer());
+    } else {
+      sceneBytes = await readFile(publicFile(video.posterUrl));
+    }
     let identityBytes: Buffer | null = null;
     let identityType: string | null = null;
     if (identity instanceof File && identity.size > 0) {

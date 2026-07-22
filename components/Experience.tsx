@@ -41,9 +41,9 @@ import {
   X,
 } from "lucide-react";
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
-import type { HotspotPreset, ProductPreset, VideoPreset } from "@/lib/content";
+import type { ProductPreset, VideoPreset } from "@/lib/content";
 
-type OpenSheet = "search" | "comments" | null;
+type OpenSheet = "comments" | null;
 type EntrySource = "pause_tag" | "comment_tab" | "ai_analysis";
 type CommentTab = "comments" | "analysis" | "tryon";
 type AppScreen = "feed" | "friends" | "messages" | "assets" | "publish";
@@ -102,9 +102,9 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
   const [activeIndex, setActiveIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const [openSheet, setOpenSheet] = useState<OpenSheet>(null);
-  const [selectedHotspot, setSelectedHotspot] = useState<HotspotPreset | null>(null);
   const [commentTab, setCommentTab] = useState<CommentTab>("comments");
-  const [tryOn, setTryOn] = useState<{ open: boolean; source: EntrySource; videoId: string }>({ open: false, source: "pause_tag", videoId: initialVideos[0]?.id ?? "" });
+  const [pausedFrame, setPausedFrame] = useState<{ videoId: string; dataUrl: string } | null>(null);
+  const [tryOn, setTryOn] = useState<{ open: boolean; source: EntrySource; videoId: string; sceneFrameDataUrl: string | null }>({ open: false, source: "pause_tag", videoId: initialVideos[0]?.id ?? "", sceneFrameDataUrl: null });
   const [tryOnMinimized, setTryOnMinimized] = useState(false);
   const [saved, setSaved] = useState<string[]>([]);
   const [screen, setScreen] = useState<AppScreen>("feed");
@@ -168,7 +168,7 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
   useEffect(() => {
     setPaused(false);
     setOpenSheet(null);
-    setSelectedHotspot(null);
+    setPausedFrame(null);
   }, [activeIndex]);
 
   function handleFeedScroll() {
@@ -178,22 +178,22 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
     if (next !== activeIndex && next >= 0 && next < initialVideos.length) setActiveIndex(next);
   }
 
-  function openSearch(hotspot: HotspotPreset) {
-    setPaused(true);
-    setSelectedHotspot(hotspot);
-    setOpenSheet("search");
+  function rememberPausedFrame(dataUrl: string | null) {
+    if (dataUrl) setPausedFrame({ videoId: activeVideo.id, dataUrl });
   }
 
-  function openComments(tab: CommentTab = "comments") {
+  function openComments(tab: CommentTab = "comments", frameDataUrl: string | null = null) {
+    rememberPausedFrame(frameDataUrl);
     setPaused(true);
     setCommentTab(tab);
     setOpenSheet("comments");
   }
 
-  function startTryOn(source: EntrySource) {
+  function startTryOn(source: EntrySource, frameDataUrl: string | null = null) {
+    const currentFrame = frameDataUrl ?? (pausedFrame?.videoId === activeVideo.id ? pausedFrame.dataUrl : null);
     setOpenSheet(null);
     setTryOnMinimized(false);
-    setTryOn({ open: true, source, videoId: activeVideo.id });
+    setTryOn({ open: true, source, videoId: activeVideo.id, sceneFrameDataUrl: currentFrame });
   }
 
   function toggleSaved(videoId: string) {
@@ -232,7 +232,7 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
         <div className="desktop-copy">
           <p className="eyebrow">SCENE / SELF / STYLE</p>
           <h1>刷到心动场景，<br />先让自己入镜。</h1>
-          <p>一条短视频，拆出场景、整套 Look 和你的形象。暂停识物，继续生成。</p>
+          <p>一条短视频，保留场景、整套 Look 和你的形象。暂停定格，继续生成。</p>
         </div>
         <div className="desktop-status">
           <span className="status-dot" />
@@ -256,10 +256,10 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
               active={index === activeIndex}
               paused={index === activeIndex && paused}
               saved={saved.includes(video.id)}
-              onTogglePause={() => index === activeIndex && setPaused((value) => !value)}
-              onSearch={openSearch}
-              onComments={() => openComments("comments")}
-              onTryOn={() => startTryOn("pause_tag")}
+              onPause={(frameDataUrl) => { if (index !== activeIndex) return; rememberPausedFrame(frameDataUrl); setPaused(true); }}
+              onResume={() => index === activeIndex && setPaused(false)}
+              onComments={(frameDataUrl) => openComments("comments", frameDataUrl)}
+              onTryOn={(frameDataUrl) => startTryOn("pause_tag", frameDataUrl)}
               onSave={() => toggleSaved(video.id)}
             />
           ))}
@@ -278,10 +278,6 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
 
         <BottomNavigation active={screen} onChange={changeScreen} />
 
-        {openSheet === "search" && selectedHotspot && (
-          <VisualSearchSheet video={activeVideo} hotspot={selectedHotspot} onClose={() => setOpenSheet(null)} onOpenProduct={setSelectedProduct} />
-        )}
-
         {openSheet === "comments" && (
           <CommentsSheet
             video={activeVideo}
@@ -296,6 +292,7 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
           <TryOnFlow
             video={tryOnVideo}
             entrySource={tryOn.source}
+            sceneFrameDataUrl={tryOn.sceneFrameDataUrl}
             initialProfile={userProfile}
             onClose={() => { setTryOnMinimized(false); setTryOn((value) => ({ ...value, open: false })); }}
             onMinimizedChange={(minimized) => { setTryOnMinimized(minimized); if (minimized) { setPaused(false); setOpenSheet(null); } }}
@@ -318,8 +315,8 @@ function FeedSlide({
   active,
   paused,
   saved,
-  onTogglePause,
-  onSearch,
+  onPause,
+  onResume,
   onComments,
   onTryOn,
   onSave,
@@ -328,10 +325,10 @@ function FeedSlide({
   active: boolean;
   paused: boolean;
   saved: boolean;
-  onTogglePause: () => void;
-  onSearch: (hotspot: HotspotPreset) => void;
-  onComments: () => void;
-  onTryOn: () => void;
+  onPause: (frameDataUrl: string | null) => void;
+  onResume: () => void;
+  onComments: (frameDataUrl: string | null) => void;
+  onTryOn: (frameDataUrl: string | null) => void;
   onSave: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -348,35 +345,44 @@ function FeedSlide({
     if (!active) element.currentTime = 0;
   }, [active, paused]);
 
+  function togglePlayback() {
+    const element = videoRef.current;
+    if (!element || !active) return;
+    if (paused) {
+      onResume();
+      return;
+    }
+    element.pause();
+    onPause(captureVideoFrame(element));
+  }
+
+  function openTryOnFromCurrentFrame(event: React.MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation();
+    const element = videoRef.current;
+    onTryOn(element ? captureVideoFrame(element) : null);
+  }
+
+  function openCommentsFromCurrentFrame() {
+    const element = videoRef.current;
+    element?.pause();
+    onComments(element ? captureVideoFrame(element) : null);
+  }
+
   return (
-    <article className={`feed-slide tone-${video.accent}`} onClick={onTogglePause}>
+    <article className={`feed-slide tone-${video.accent}`} onClick={togglePlayback}>
       <video ref={videoRef} className="feed-media" src={video.videoUrl} poster={video.posterUrl} loop muted playsInline preload={active ? "auto" : "metadata"} />
-      {paused && <img className="freeze-frame" src={video.posterUrl} alt="当前视频的高清识物帧" />}
       <div className="media-shade" />
 
       {paused && (
-        <div className="recognition-layer" aria-label="已识别的穿搭单品">
-          <div className="scan-line" />
-          <div className="recognition-caption"><Sparkles size={13} /> AI 已拆解这套 Look</div>
-          {video.hotspots.map((hotspot) => (
-            <button
-              className="hotspot-label"
-              key={hotspot.id}
-              style={{ left: `${hotspot.labelPosition.x}%`, top: `${hotspot.labelPosition.y}%` }}
-              type="button"
-              onClick={(event) => { event.stopPropagation(); onSearch(hotspot); }}
-            >
-              <span className="hotspot-dot" />
-              {hotspot.label}
-            </button>
-          ))}
-          <button className="try-on-float" type="button" onClick={(event) => { event.stopPropagation(); onTryOn(); }}>
-            <WandSparkles size={17} /> 试试这套
+        <div className="pause-action-layer">
+          <button className="pause-tryon-tag" type="button" onClick={openTryOnFromCurrentFrame}>
+            <span className="pause-tryon-dot" />
+            试试这套穿搭
           </button>
         </div>
       )}
 
-      {!paused && active && <div className="tap-hint"><Pause size={13} /> 点击暂停 · 识别穿搭</div>}
+      {!paused && active && <div className="tap-hint"><Pause size={13} /> 点击暂停</div>}
       {paused && <div className="pause-glyph"><Play size={34} fill="currentColor" /></div>}
 
       <div className="feed-copy">
@@ -389,12 +395,29 @@ function FeedSlide({
       <div className="action-rail" onClick={(event) => event.stopPropagation()}>
         <button className="avatar-action" type="button" aria-label="作者主页"><span>{video.avatarLabel}</span><i>+</i></button>
         <RailAction active={liked} label={video.counts.likes} onClick={() => setLiked((value) => !value)}><Heart size={29} fill={liked ? "currentColor" : "none"} /></RailAction>
-        <RailAction label={video.counts.comments} onClick={onComments}><MessageCircle size={28} fill="currentColor" /></RailAction>
+        <RailAction label={video.counts.comments} onClick={openCommentsFromCurrentFrame}><MessageCircle size={28} fill="currentColor" /></RailAction>
         <RailAction active={saved} label={video.counts.saves} onClick={onSave}><Bookmark size={27} fill={saved ? "currentColor" : "none"} /></RailAction>
         <RailAction label="分享"><Share2 size={27} fill="currentColor" /></RailAction>
       </div>
     </article>
   );
+}
+
+function captureVideoFrame(video: HTMLVideoElement) {
+  if (!video.videoWidth || !video.videoHeight || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return null;
+  try {
+    const maxEdge = 1280;
+    const scale = Math.min(1, maxEdge / Math.max(video.videoWidth, video.videoHeight));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+    canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+    const context = canvas.getContext("2d");
+    if (!context) return null;
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.9);
+  } catch {
+    return null;
+  }
 }
 
 function RailAction({ children, label, active = false, onClick }: { children: React.ReactNode; label: string; active?: boolean; onClick?: () => void }) {
@@ -429,40 +452,6 @@ function SheetHeader({ title, eyebrow, onClose }: { title: string; eyebrow?: str
       <div><span>{eyebrow}</span><h3>{title}</h3></div>
       <button type="button" onClick={onClose} aria-label="关闭"><X size={21} /></button>
     </header>
-  );
-}
-
-function VisualSearchSheet({ video, hotspot, onClose, onOpenProduct }: { video: VideoPreset; hotspot: HotspotPreset; onClose: () => void; onOpenProduct: (product: ProductPreset) => void }) {
-  const [tab, setTab] = useState<"mixed" | "products">("mixed");
-  const products = video.products.filter((product) => hotspot.productIds.includes(product.id));
-  const fallbackProducts = products.length ? products : video.products;
-
-  return (
-    <div className="sheet-layer" onClick={onClose}>
-      <section className="bottom-sheet search-sheet" onClick={(event) => event.stopPropagation()}>
-        <div className="sheet-grabber" />
-        <SheetHeader eyebrow="VISUAL SEARCH" title={hotspot.label.replace("搜同款", "")} onClose={onClose} />
-        <div className="search-target">
-          <div className="target-image"><img src={video.posterUrl} alt="识别目标" /></div>
-          <div><span>当前识别</span><strong>{hotspot.label.replace("搜同款", "")}</strong><small>基于外观与穿搭语义匹配</small></div>
-          <Sparkles size={20} />
-        </div>
-        <div className="sheet-tabs">
-          <button className={tab === "mixed" ? "active" : ""} type="button" onClick={() => setTab("mixed")}>综合</button>
-          <button className={tab === "products" ? "active" : ""} type="button" onClick={() => setTab("products")}>商品</button>
-        </div>
-        <div className="product-grid">
-          {fallbackProducts.map((product) => <ProductCard key={product.id} product={product} onOpen={() => onOpenProduct(product)} />)}
-          {tab === "mixed" && (
-            <article className="related-card">
-              <img src={video.posterUrl} alt="同单品其他场景" />
-              <div><span>同单品 · 其他场景</span><strong>从雪线穿回城市</strong><small>3 个可复用搭配</small></div>
-            </article>
-          )}
-        </div>
-        <div className="fake-search"><Search size={17} /><span>继续搜「{hotspot.label.replace("搜同款", "") }」</span><button type="button">搜索</button></div>
-      </section>
-    </div>
   );
 }
 
@@ -539,21 +528,22 @@ function CommentsSheet({ video, tab, onTabChange, onClose, onTryOn }: { video: V
 function IntroOverlay({ onStart }: { onStart: () => void }) {
   return (
     <section className="intro-overlay">
-      <div className="intro-image"><img src="/media/images/alpine-look.jpg" alt="雪山湖畔穿搭" /><div className="intro-scan" /></div>
+      <div className="intro-image"><img src="/media/images/nalati-blue-dress.jpg" alt="那拉提溪谷蓝裙穿搭" /><div className="intro-scan" /></div>
       <div className="intro-content">
         <p className="eyebrow">SCENE FIT / 01</p>
         <h2>先看见场景，<br />再看见自己。</h2>
-        <p>暂停视频识别整套 Look，从评论区看懂搭配，再生成你在同一个场景里的样子。</p>
-        <div className="intro-steps"><span>暂停识物</span><i /><span>AI 解析</span><i /><span>AI 上身</span></div>
+        <p>暂停在你喜欢的瞬间，用这一帧的场景与整套 Look，生成你在画面里的样子。</p>
+        <div className="intro-steps"><span>暂停视频</span><i /><span>试试穿搭</span><i /><span>生成新图</span></div>
         <button type="button" onClick={onStart}>开始刷视频 <span>向上滑</span></button>
       </div>
     </section>
   );
 }
 
-function TryOnFlow({ video, entrySource, initialProfile, onClose, onMinimizedChange, onSaveProfile, onSaveAsset, onOpenProduct, onPublish, onJumpOriginal }: {
+function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onClose, onMinimizedChange, onSaveProfile, onSaveAsset, onOpenProduct, onPublish, onJumpOriginal }: {
   video: VideoPreset;
   entrySource: EntrySource;
+  sceneFrameDataUrl: string | null;
   initialProfile: UserTryOnProfile | null;
   onClose: () => void;
   onMinimizedChange: (minimized: boolean) => void;
@@ -589,6 +579,7 @@ function TryOnFlow({ video, entrySource, initialProfile, onClose, onMinimizedCha
   const faceDirections = ["正视镜头", "缓慢向左转", "缓慢向右转", "轻轻抬头", "轻轻低头"];
   const generationMessages = ["正在提交场景与授权人像", "正在整理场景、形象与身体数据", "Seedream 5.0 Lite 正在生成画面", "正在完成最终渲染"];
   const activeVersion = resultVersions.find((version) => version.id === activeVersionId) ?? resultVersions.at(-1) ?? null;
+  const sceneReferenceUrl = sceneFrameDataUrl ?? video.posterUrl;
   const revisionSuggestions = ["换到海边日落，保留这套穿搭", "改成自然向前走的抓拍姿势", "镜头拉远，完整看到鞋子和环境"];
 
   useEffect(() => () => {
@@ -683,6 +674,7 @@ function TryOnFlow({ video, entrySource, initialProfile, onClose, onMinimizedCha
     form.set("outfitStyle", outfitStyle);
     form.set("consentAccepted", "true");
     form.set("entrySource", entrySource);
+    if (sceneFrameDataUrl) form.set("sceneFrame", await dataUrlToFile(sceneFrameDataUrl, `${video.id}-paused-frame.jpg`));
     if (identityDataUrl && !useDemoIdentity) form.set("identityBoard", await dataUrlToFile(identityDataUrl, "identity-board.jpg"));
     if (options) {
       form.set("revisionPrompt", options.revisionPrompt);
@@ -834,7 +826,7 @@ function TryOnFlow({ video, entrySource, initialProfile, onClose, onMinimizedCha
   if (minimized) {
     return (
       <button className={`generation-float ${floatingState}`} type="button" onClick={restoreGeneration} aria-live="polite" aria-label={floatingState === "working" ? "场景 Look 正在生成，点击查看" : floatingState === "complete" ? "场景 Look 已生成，点击查看结果" : "场景 Look 生成失败，点击查看详情"}>
-        <span className="generation-float-visual"><img src={activeVersion?.imageUrl ?? video.posterUrl} alt="" /><i>{floatingState === "complete" ? <Check size={14} /> : floatingState === "failed" ? <X size={14} /> : <Sparkles size={13} />}</i></span>
+        <span className="generation-float-visual"><img src={activeVersion?.imageUrl ?? sceneReferenceUrl} alt="" /><i>{floatingState === "complete" ? <Check size={14} /> : floatingState === "failed" ? <X size={14} /> : <Sparkles size={13} />}</i></span>
         <span className="generation-float-copy">
           <strong>{floatingState === "working" ? "正在生成场景 Look" : floatingState === "complete" ? "你的新 Look 已生成" : "生成遇到问题"}</strong>
           <small>{floatingState === "working" ? generationStatusMessage ?? generationMessages[generationStage] : floatingState === "complete" ? `${resultVersions.length} 张照片 · 点击查看` : `${error ?? "点击返回查看详情"}`}</small>
@@ -855,7 +847,7 @@ function TryOnFlow({ video, entrySource, initialProfile, onClose, onMinimizedCha
 
         {step === 0 && (
           <div className="flow-body identity-step">
-            <div className="reference-strip"><img src={video.posterUrl} alt="场景参考" /><div><span>已锁定场景与 Look</span><strong>{video.location}</strong><small>系统会保留原场景氛围和完整穿搭</small></div><Check size={18} /></div>
+            <div className="reference-strip"><img src={sceneReferenceUrl} alt="视频暂停帧参考" /><div><span>已锁定暂停帧与 Look</span><strong>{video.location}</strong><small>系统会以你刚才暂停的瞬间为参考</small></div><Check size={18} /></div>
             <div className={`face-capture-stage ${cameraActive ? "is-camera" : ""}`}>
               <div className="face-orbit" aria-label="人脸录入预览">
                 {cameraActive
@@ -919,8 +911,8 @@ function TryOnFlow({ video, entrySource, initialProfile, onClose, onMinimizedCha
         {step === 2 && (
           <form className="flow-body confirm-step" onSubmit={generate}>
             <div className="reference-cards">
-              <article><img src={video.posterUrl} alt="场景" /><span>01 / 场景</span><strong>{video.location}</strong></article>
-              <article><img src={video.posterUrl} alt="完整 Look" /><span>02 / LOOK</span><strong>{video.products.length} 件完整穿搭</strong></article>
+              <article><img src={sceneReferenceUrl} alt="暂停帧场景" /><span>01 / 暂停帧</span><strong>{video.location}</strong></article>
+              <article><img src={sceneReferenceUrl} alt="暂停帧完整 Look" /><span>02 / LOOK</span><strong>{video.products.length} 件完整穿搭</strong></article>
               <article><img src={useDemoIdentity ? video.posterUrl : identityDataUrl ?? video.posterUrl} alt="人物" /><span>03 / 人物</span><strong>{useDemoIdentity ? "演示人物" : "我的形象"}</strong></article>
             </div>
             {initialProfile && <div className="profile-reuse-note"><CheckCircle2 size={18} /><div><strong>已使用你上次保存的形象</strong><span>以后从三个入口进入，都可以直接生成</span></div><button type="button" onClick={() => setStep(0)}>修改</button></div>}
@@ -1097,7 +1089,7 @@ function AssetLibraryScreen({ assets, videos, saved, onOpenAsset, onJumpOriginal
   const savedVideos = videos.filter((video) => saved.includes(video.id));
   return (
     <section className="app-screen asset-screen">
-      <div className="profile-hero"><img src="/media/images/alpine-look.jpg" alt="个人主页背景" /><div className="profile-shade" /><div className="profile-avatar">镜<span>+</span></div><div className="profile-name"><strong>Scene Fitter</strong><span>场景穿搭创作者</span></div><button type="button">编辑主页</button></div>
+      <div className="profile-hero"><img src="/media/images/nalati-blue-dress.jpg" alt="个人主页背景" /><div className="profile-shade" /><div className="profile-avatar">镜<span>+</span></div><div className="profile-name"><strong>Scene Fitter</strong><span>场景穿搭创作者</span></div><button type="button">编辑主页</button></div>
       <div className="profile-stats"><span><strong>12</strong>获赞</span><span><strong>{assets.length}</strong>AIGC 资产</span><span><strong>{saved.length}</strong>收藏视频</span><span><strong>8</strong>关注</span></div>
       <div className="profile-content-tabs"><button type="button">作品</button><button type="button">日常</button><button className="active" type="button">收藏</button><button type="button">喜欢</button></div>
       <div className="asset-tabs"><button className={tab === "saved" ? "active" : ""} type="button" onClick={() => setTab("saved")}><Bookmark size={15} />视频</button><button className={tab === "assets" ? "active" : ""} type="button" onClick={() => setTab("assets")}><Images size={15} />我的穿搭</button></div>
