@@ -981,8 +981,8 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
   const versionRailRef = useRef<HTMLDivElement>(null);
   const faceDirections = ["正视镜头", "缓慢向左转", "缓慢向右转", "轻轻抬头", "轻轻低头"];
   const generationMessages = generationMode === "refined"
-    ? ["正在提交精细生成任务", "Sol 正在分析场景、形象与身体数据", "Sol 已调用 image2 生成画面", "正在完成高质量细节渲染"]
-    : ["正在提交快速生成任务", "正在整理场景、形象与身体数据", "Seedream 5.0 Lite 正在生成画面", "正在完成最终渲染"];
+    ? ["正在准备精细生成任务", "正在分析场景与形象信息", "正在生成高质量穿搭图", "正在完善图片细节"]
+    : ["正在准备快速生成任务", "正在整理场景与形象信息", "正在生成场景穿搭图", "正在完善图片细节"];
   const activeVersion = resultVersions.find((version) => version.id === activeVersionId) ?? resultVersions.at(-1) ?? null;
   const activeProducts = activeVersion?.products.length ? activeVersion.products : video.products;
   const sceneReferenceUrl = sceneFrameDataUrl ?? video.posterUrl;
@@ -1214,7 +1214,7 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
     onMinimizedChange(false);
   }
 
-  const stepTitle = ["录入我的形象", "补充身材信息", "确认生成内容", "你的场景 Look"][step];
+  const stepTitle = ["录入我的形象", "补充身材信息", "确认生成内容", "你的场景穿搭图"][step];
   const canStepBack = step > 0 && step < 3 && !(hasSavedIdentity && step === 2);
   const floatingState = generating ? "working" : error ? "failed" : "complete";
   const selectedBodyTypeLabel = bodyTypeOptions.find(([value]) => value === bodyType)?.[1] ?? "沙漏型";
@@ -1222,11 +1222,11 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
 
   if (minimized) {
     return (
-      <button className={`generation-float ${floatingState}`} type="button" onClick={restoreGeneration} aria-live="polite" aria-label={floatingState === "working" ? "场景 Look 正在生成，点击查看" : floatingState === "complete" ? "场景 Look 已生成，点击查看结果" : "场景 Look 生成失败，点击查看详情"}>
+      <button className={`generation-float ${floatingState}`} type="button" onClick={restoreGeneration} aria-live="polite" aria-label={floatingState === "working" ? "场景穿搭图正在生成，点击查看" : floatingState === "complete" ? "场景穿搭图已生成，点击查看结果" : "场景穿搭图生成失败，点击查看详情"}>
         <span className="generation-float-visual"><img src={activeVersion?.imageUrl ?? sceneReferenceUrl} alt="" /><i>{floatingState === "complete" ? <Check size={14} /> : floatingState === "failed" ? <X size={14} /> : <Sparkles size={13} />}</i></span>
         <span className="generation-float-copy">
-          <strong>{floatingState === "working" ? "正在生成场景 Look" : floatingState === "complete" ? "你的新 Look 已生成" : "生成遇到问题"}</strong>
-          <small>{floatingState === "working" ? generationStatusMessage ?? generationMessages[generationStage] : floatingState === "complete" ? `${resultVersions.length} 张照片 · 点击查看` : `${error ?? "点击返回查看详情"}`}</small>
+          <strong>{floatingState === "working" ? "正在生成场景穿搭图" : floatingState === "complete" ? "你的新穿搭图已生成" : "生成遇到问题"}</strong>
+          <small>{floatingState === "working" ? generationMessages[generationStage] : floatingState === "complete" ? `${resultVersions.length} 张照片 · 点击查看` : `${error ?? "点击返回查看详情"}`}</small>
           {floatingState === "working" && <span className="generation-float-track"><i style={{ width: `${(generationStage + 1) / generationMessages.length * 100}%` }} /></span>}
         </span>
         <ChevronRight size={17} />
@@ -1337,10 +1337,10 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
             </section>
             <section className="confirm-section generate-action-section" aria-labelledby="generate-action-title">
               <header className="confirm-section-heading"><strong id="generate-action-title">开始生成</strong></header>
-              <div className="background-generation-tip"><Minimize2 size={17} /><span><strong>生成后可收起继续刷</strong><small>任务会变成视频旁的进度浮层，完成后提醒你查看。</small></span></div>
+              {!generating && <div className="background-generation-tip"><Minimize2 size={17} /><span><strong>生成后可收起继续刷</strong><small>任务会变成视频旁的进度浮层，完成后提醒你查看。</small></span></div>}
               {error && <p className="form-error">{error}</p>}
-              <button className={`flow-primary generate-button mode-${generationMode}`} disabled={generating || !consent} type="submit">{generating ? <><span className="spinner" />正在融合场景与 Look</> : <>{generationMode === "fast" ? <Zap size={18} /> : <WandSparkles size={18} />}{generationMode === "fast" ? "快速生成场景 Look" : "精细生成场景 Look"}</>}</button>
-              {generating && <div className="generation-progress" role="status" aria-live="polite"><div><Sparkles size={18} /><span><strong>{generationStatusMessage ?? generationMessages[generationStage]}</strong><small>生图耗时可能较长；未返回明确错误时会持续等待</small></span></div><div className="generation-track"><i style={{ width: `${(generationStage + 1) / generationMessages.length * 100}%` }} /></div><button className="minimize-generation" type="button" onClick={minimizeGeneration}><Minimize2 size={15} />收起，继续刷视频</button></div>}
+              <button className={`flow-primary generate-button mode-${generationMode}`} disabled={generating || !consent} type="submit">{generating ? <><span className="spinner" />正在生成场景穿搭图</> : <>{generationMode === "fast" ? <Zap size={18} /> : <WandSparkles size={18} />}{generationMode === "fast" ? "快速生成场景穿搭图" : "精细生成场景穿搭图"}</>}</button>
+              {generating && <div className="generation-progress" role="status" aria-live="polite"><div><Minimize2 size={17} /><span><strong>图片正在生成</strong><small>收起后任务会在后台继续</small></span></div><div className="generation-track"><i style={{ width: `${(generationStage + 1) / generationMessages.length * 100}%` }} /></div><button className="minimize-generation" type="button" onClick={minimizeGeneration}>收起，继续刷视频</button></div>}
             </section>
           </form>
         )}
