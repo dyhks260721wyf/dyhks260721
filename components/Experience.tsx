@@ -978,7 +978,6 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
   const cameraVideoRef = useRef<HTMLVideoElement>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const revisionInputRef = useRef<HTMLTextAreaElement>(null);
-  const versionRailRef = useRef<HTMLDivElement>(null);
   const faceDirections = ["正视镜头", "缓慢向左转", "缓慢向右转", "轻轻抬头", "轻轻低头"];
   const generationMessages = generationMode === "refined"
     ? ["正在准备精细生成任务", "正在分析场景与形象信息", "正在生成高质量穿搭图", "正在完善图片细节"]
@@ -991,11 +990,6 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
   useEffect(() => () => {
     cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
   }, []);
-
-  useEffect(() => {
-    const rail = versionRailRef.current;
-    if (rail && resultVersions.length > 1) rail.scrollTo({ left: rail.scrollWidth, behavior: "smooth" });
-  }, [resultVersions.length]);
 
   async function startCamera() {
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -1214,7 +1208,7 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
     onMinimizedChange(false);
   }
 
-  const stepTitle = ["录入我的形象", "补充身材信息", "确认生成内容", "你的场景穿搭图"][step];
+  const stepTitle = ["录入我的形象", "补充身材信息", "确认生成内容", "我的场景穿搭"][step];
   const canStepBack = step > 0 && step < 3 && !(hasSavedIdentity && step === 2);
   const floatingState = generating ? "working" : error ? "failed" : "complete";
   const selectedBodyTypeLabel = bodyTypeOptions.find(([value]) => value === bodyType)?.[1] ?? "沙漏型";
@@ -1347,51 +1341,32 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
 
         {step === 3 && activeVersion && (
           <div className="result-step">
-            <GeneratedImageStage className="result-image-stage" src={activeVersion.imageUrl} alt={`生成的场景穿搭结果，第 ${resultVersions.findIndex((version) => version.id === activeVersion.id) + 1} 个版本`}>
-              <div className="result-topline"><span><Sparkles size={14} /> {activeVersion.resultMode === "sol-image-generation" ? "Sol + image2 · 精细生成" : activeVersion.resultMode === "seedream-generation" ? "Seedream · 快速生成" : "本地演示结果"}</span><small>{resultVersions.findIndex((version) => version.id === activeVersion.id) + 1} / {resultVersions.length}</small></div>
-              {generating && <div className="revision-image-progress" role="status"><span className="spinner" /><strong>{generationStatusMessage ?? generationMessages[generationStage]}</strong><small>正在保留当前版本，并生成一张新照片</small><button className="revision-minimize" type="button" onClick={minimizeGeneration}><Minimize2 size={15} />收起，继续浏览</button></div>}
-            </GeneratedImageStage>
-            <div className="result-panel">
-              <section className="revision-studio" aria-label="继续修改图片">
-                <header><span><WandSparkles size={16} /></span><div><strong>继续改这张</strong><small>说出你想换的场景、姿势或镜头</small></div><em>{revisionPrompt.length}/300</em></header>
-                <div className="revision-suggestions" aria-label="修改建议">
-                  {revisionSuggestions.map((suggestion) => <button key={suggestion} disabled={generating} type="button" onClick={() => { setRevisionPrompt(suggestion); revisionInputRef.current?.focus(); }}>{suggestion}</button>)}
-                </div>
-                <form className="revision-composer" onSubmit={refineResult}>
-                  <WandSparkles size={18} aria-hidden="true" />
-                  <textarea ref={revisionInputRef} value={revisionPrompt} maxLength={300} rows={1} disabled={generating} aria-label="输入图片修改需求" placeholder="例如：换到雨后的上海街头，改成自然回眸…" onChange={(event) => setRevisionPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} />
-                  <button disabled={generating || revisionPrompt.trim().length < 2} type="submit" aria-label="生成新版本">{generating ? <span className="spinner" /> : <Send size={18} />}</button>
-                </form>
-                {error && <p className="revision-error">{error}</p>}
-                <p className="revision-wait-note">生成期间可以继续查看当前照片；未返回明确错误时会持续等待。</p>
-              </section>
-
-              <section className="version-history" aria-label="生成版本">
-                <header><div><strong>这次生成的照片</strong><span>点选查看，喜欢的可以逐张收藏</span></div><b>{resultVersions.length} 张</b></header>
-                <div className="version-rail" ref={versionRailRef}>
-                  {resultVersions.map((version, index) => (
-                    <button className={version.id === activeVersion.id ? "active" : ""} key={version.id} type="button" onClick={() => setActiveVersionId(version.id)} aria-label={`查看第 ${index + 1} 张照片`}>
-                      <img src={version.imageUrl} alt="" />
-                      <span>V{index + 1}</span>
-                      {version.saved && <i><Bookmark size={10} fill="currentColor" /></i>}
-                    </button>
-                  ))}
-                  {generating && <div className="version-pending"><span className="spinner" /><small>V{resultVersions.length + 1}</small></div>}
-                </div>
-              </section>
-
-              <span className="result-emotion">这一刻，场景终于有了你的样子</span>
-              <h4>{activeVersion.prompt === "初始生成" ? "你已经在这个场景里了。" : "你的新想法，也已经入镜。"}</h4>
-              <p>{activeVersion.prompt === "初始生成" ? `画面保留了${video.location}的光线、氛围与原视频完整 Look，并按你的身材比例和「${poseOptions.find((item) => item.value === poseStyle)?.label}」重新编排。` : `本次修改：${activeVersion.prompt}`}</p>
-              <button className={`save-result-block ${activeVersion.saved ? "saved" : ""}`} type="button" onClick={saveResult}><span>{activeVersion.saved ? <CheckCircle2 size={20} /> : <Bookmark size={20} />}<strong>{activeVersion.saved ? "这张已收藏到我的穿搭" : "收藏当前图片"}</strong></span><small>{activeVersion.saved ? "其他版本仍可继续单独收藏" : "每个生成版本都可以单独收藏和发布"}</small></button>
-              <div className="result-actions"><button type="button" onClick={downloadResult}><Download size={18} />保存本地</button><button type="button" onClick={() => setStep(2)}><RotateCcw size={18} />重新设定</button><button type="button" onClick={onClose}><Play size={18} />继续刷</button></div>
-              <div className="result-publish-row"><button type="button" onClick={publishResult}><Sparkles size={18} />一键发布</button><button type="button" onClick={onJumpOriginal}><Music2 size={17} />原视频 / 原声</button></div>
-              <div className="result-products-heading"><div><span>{video.userUploaded ? "Luna 识别相似款" : "搭配同款"}</span><strong>把画面变成可买的 Look</strong></div><ShoppingCart size={20} /></div>
-              {activeProducts.length > 0
-                ? <><div className="result-product-grid">{activeProducts.map((product) => <ProductCard key={product.id} product={product} onOpen={() => onOpenProduct(product)} />)}</div><button className="shop-look" type="button" onClick={() => onOpenProduct(activeProducts[0])}><ShoppingBag size={18} />查看这套 Look 的 {activeProducts.length} 件商品</button></>
-                : <div className="product-analysis-empty"><Search size={19} /><div><strong>这一帧没有识别到清晰单品</strong><span>{activeVersion.productStatus === "failed" ? "商品识别暂时未完成，生成图片仍可正常收藏" : "可以返回视频，换一帧人物与穿搭更清晰的画面"}</span></div></div>}
-              <button className="back-feed" type="button" onClick={onClose}>返回继续刷视频</button>
+            <div className="result-scroll">
+              <GeneratedImageStage className="result-image-stage" src={activeVersion.imageUrl} alt="生成的场景穿搭图片">
+                {generating && <div className="revision-image-progress" role="status"><span className="spinner" /><strong>{generationStatusMessage ?? generationMessages[generationStage]}</strong><small>正在保留当前图片，并生成新的效果</small><button className="revision-minimize" type="button" onClick={minimizeGeneration}><Minimize2 size={15} />收起，继续浏览</button></div>}
+              </GeneratedImageStage>
+              <div className="result-panel">
+                <button className={`save-result-block ${activeVersion.saved ? "saved" : ""}`} type="button" onClick={saveResult}><span>{activeVersion.saved ? <CheckCircle2 size={20} /> : <Bookmark size={20} />}<strong>{activeVersion.saved ? "这张已收藏到我的穿搭" : "收藏当前图片"}</strong></span><small>{activeVersion.saved ? "当前图片已保存，可继续生成新的效果" : "收藏后可在我的穿搭中查看和发布"}</small></button>
+                <div className="result-actions"><button type="button" onClick={downloadResult}><Download size={18} />保存本地</button><button type="button" onClick={() => setStep(2)}><RotateCcw size={18} />重新设定</button><button type="button" onClick={onClose}><Play size={18} />继续刷</button></div>
+                <div className="result-publish-row"><button type="button" onClick={publishResult}><Sparkles size={18} />一键发布</button><button type="button" onClick={onJumpOriginal}><Music2 size={17} />原视频 / 原声</button></div>
+                <div className="result-products-heading"><div><span>{video.userUploaded ? "Luna 识别相似款" : "搭配同款"}</span><strong>把画面变成可买的 Look</strong></div><ShoppingCart size={20} /></div>
+                {activeProducts.length > 0
+                  ? <><div className="result-product-grid">{activeProducts.map((product) => <ProductCard key={product.id} product={product} onOpen={() => onOpenProduct(product)} />)}</div><button className="shop-look" type="button" onClick={() => onOpenProduct(activeProducts[0])}><ShoppingBag size={18} />查看这套 Look 的 {activeProducts.length} 件商品</button></>
+                  : <div className="product-analysis-empty"><Search size={19} /><div><strong>这一帧没有识别到清晰单品</strong><span>{activeVersion.productStatus === "failed" ? "商品识别暂时未完成，生成图片仍可正常收藏" : "可以返回视频，换一帧人物与穿搭更清晰的画面"}</span></div></div>}
+                <button className="back-feed" type="button" onClick={onClose}>返回继续刷视频</button>
+              </div>
             </div>
+            <section className="revision-float" aria-label="继续修改图片">
+              <div className="revision-suggestions" aria-label="修改建议">
+                {revisionSuggestions.map((suggestion) => <button key={suggestion} disabled={generating} type="button" onClick={() => { setRevisionPrompt(suggestion); revisionInputRef.current?.focus(); }}>{suggestion}</button>)}
+              </div>
+              <form className="revision-composer" onSubmit={refineResult}>
+                <WandSparkles size={18} aria-hidden="true" />
+                <textarea ref={revisionInputRef} value={revisionPrompt} maxLength={300} rows={1} disabled={generating} aria-label="输入图片修改需求" placeholder="例如：换到雨后的上海街头，改成自然回眸…" onChange={(event) => setRevisionPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} />
+                <button disabled={generating || revisionPrompt.trim().length < 2} type="submit" aria-label="生成新图片">{generating ? <span className="spinner" /> : <Send size={18} />}</button>
+              </form>
+              {error && <p className="revision-error">{error}</p>}
+            </section>
           </div>
         )}
       </section>
