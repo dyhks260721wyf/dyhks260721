@@ -2,6 +2,8 @@
 
 import {
   AlertCircle,
+  ArrowDown,
+  ArrowUp,
   ArrowUpRight,
   CheckCircle2,
   Eye,
@@ -38,6 +40,7 @@ export function AdminDashboard() {
   const [filter, setFilter] = useState<"all" | "preset" | "upload">("all");
   const [notice, setNotice] = useState<Notice>(null);
   const [pendingDelete, setPendingDelete] = useState<ManagedItem | null>(null);
+  const [orderingId, setOrderingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function loadItems(candidatePassword = password, quiet = false) {
@@ -161,6 +164,33 @@ export function AdminDashboard() {
     }
   }
 
+  async function moveVideo(videoId: string, direction: -1 | 1) {
+    const activeItems = items.filter((item) => item.active);
+    const currentIndex = activeItems.findIndex((item) => item.video.id === videoId);
+    const targetIndex = currentIndex + direction;
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= activeItems.length) return;
+
+    const reordered = [...activeItems];
+    [reordered[currentIndex], reordered[targetIndex]] = [reordered[targetIndex], reordered[currentIndex]];
+    setOrderingId(videoId);
+    setNotice(null);
+    try {
+      const response = await fetch("/api/admin/content", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "x-admin-password": password },
+        body: JSON.stringify({ orderedVideoIds: reordered.map((item) => item.video.id) }),
+      });
+      const payload = await response.json().catch(() => ({ message: "调整顺序失败" })) as { items?: ManagedItem[]; message?: string };
+      if (!response.ok || !payload.items) throw new Error(payload.message ?? "调整顺序失败");
+      setItems(payload.items);
+      setNotice({ tone: "success", message: `${reordered[targetIndex].video.title}已移动到第 ${targetIndex + 1} 条` });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "调整顺序失败" });
+    } finally {
+      setOrderingId(null);
+    }
+  }
+
   const visibleItems = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return items.filter((item) => {
@@ -204,7 +234,7 @@ export function AdminDashboard() {
 
       <section className="admin-workspace">
         <header className="admin-header">
-          <div><p className="admin-kicker">VIDEO FEED / {activeCount} ACTIVE</p><h1>管理视频流</h1><span>按当前 Feed 顺序查看内容，上传后将自动排在末尾。</span></div>
+          <div><p className="admin-kicker">VIDEO FEED / {activeCount} ACTIVE</p><h1>管理视频流</h1><span>列表即用户端播放顺序，可用上下箭头调整；新视频默认排在末尾。</span></div>
           <input ref={fileInputRef} type="file" accept="video/mp4,video/webm" onChange={uploadVideo} hidden />
           <button className="admin-upload-button" type="button" disabled={uploading} onClick={() => fileInputRef.current?.click()}>{uploading ? <><span className="admin-spinner dark" />正在处理视频</> : <><Upload size={18} />新增视频</>}</button>
         </header>
@@ -234,6 +264,10 @@ export function AdminDashboard() {
                 <img src={item.video.posterUrl} alt="" />
                 <div className="admin-video-copy"><div><span className={`admin-source ${item.source}`}>{item.source === "preset" ? "内置" : "上传"}</span>{!item.active && <span className="admin-hidden"><EyeOff size={12} />已移除</span>}</div><h2>{item.video.title}</h2><p>@{item.video.author}<i />{item.video.location}</p><small>{item.video.uploadedAt ? formatDate(item.video.uploadedAt) : "随版本发布"} · {item.video.mediaType === "image" ? "图片" : "视频"}</small></div>
                 <div className="admin-video-actions">
+                  {item.active && <div className="admin-order-controls" aria-label={`调整${item.video.title}的播放顺序`}>
+                    <button type="button" disabled={feedIndex <= 0 || orderingId !== null} onClick={() => void moveVideo(item.video.id, -1)} aria-label="上移一位"><ArrowUp size={16} /><span>上移</span></button>
+                    <button type="button" disabled={feedIndex < 0 || feedIndex >= activeCount - 1 || orderingId !== null} onClick={() => void moveVideo(item.video.id, 1)} aria-label="下移一位"><ArrowDown size={16} /><span>下移</span></button>
+                  </div>}
                   <a href={item.video.videoUrl || item.video.posterUrl} target="_blank" rel="noreferrer" aria-label="预览媒体"><Eye size={17} /><span>预览</span></a>
                   {item.active ? <button className="danger" type="button" onClick={() => setPendingDelete(item)}><Trash2 size={17} /><span>{item.source === "upload" ? "删除" : "移除"}</span></button> : <button type="button" onClick={() => void restorePreset(item)}><RefreshCw size={17} /><span>恢复</span></button>}
                 </div>

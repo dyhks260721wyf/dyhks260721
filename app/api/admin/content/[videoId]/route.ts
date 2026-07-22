@@ -1,6 +1,6 @@
 import { requireAdmin } from "@/lib/admin-auth";
 import { deleteUserContent } from "@/lib/user-content";
-import { listManagedVideos, setPresetActive } from "@/lib/video-catalog";
+import { listManagedVideos, removeVideoFromCatalogOrder, setPresetActive } from "@/lib/video-catalog";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +19,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ v
   if (videoId.startsWith("user-")) {
     const deleted = await deleteUserContent(videoId);
     if (!deleted) return Response.json({ code: "NOT_FOUND", message: "视频不存在或已删除" }, { status: 404 });
+    await removeVideoFromCatalogOrder(videoId);
     return Response.json({ deleted: true, permanent: true });
   }
 

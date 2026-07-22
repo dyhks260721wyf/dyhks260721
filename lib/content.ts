@@ -45,10 +45,13 @@ export type VideoPreset = {
 const nalatiImage = "/media/images/nalati-blue-dress.jpg";
 const guilinImage = "/media/images/guilin-window-look.jpg";
 const islandImage = "/media/images/island-summer-look.jpg";
+const linenRanchImage = "/media/images/linen-ranch-look.jpg";
+const blackSuitImage = "/media/images/black-suit-look.jpg";
+const turquoiseBeachImage = "/media/images/turquoise-beach-look.jpg";
 
 export const contentManifest: { schemaVersion: "1"; contentVersion: string; videos: VideoPreset[] } = {
   schemaVersion: "1",
-  contentVersion: "2026-07-23.1",
+  contentVersion: "2026-07-23.2",
   videos: [
     {
       id: "nalati-blue-dress",
@@ -151,6 +154,108 @@ export const contentManifest: { schemaVersion: "1"; contentVersion: string; vide
           { id: "q1", question: "去海边这样穿实用吗？", answer: "上装和包袋都轻便，但镂空针织容易勾挂；下水前建议单独收好，行走时注意足部防晒。" },
           { id: "q2", question: "怎样拍得自然？", answer: "扶帽沿、沿浪线慢走或倚靠椰树都比正面站直更松弛；镜头略低于胸口可保留海平线和腿部比例。" },
           { id: "q3", question: "不穿短裤还能怎么搭？", answer: "可以换成白色亚麻长裤或轻薄围裹裙，色调仍与草帽、针织上衣保持统一。" },
+        ],
+      },
+    },
+    {
+      id: "linen-ranch-look",
+      author: "挽苏Elio",
+      avatarLabel: "苏",
+      title: "亚麻套装是不是上辈子救过男生的命。轻松、干净，又很适合户外度假。",
+      location: "户外牧场 · 白色围栏",
+      audio: "If I Ain't Got You · 原声",
+      videoUrl: "/media/videos/linen-ranch-look.mp4",
+      posterUrl: linenRanchImage,
+      counts: { likes: "3111", comments: "36", saves: "364" },
+      eligible: true,
+      accent: "blue",
+      hotspots: [
+        { id: "linen-shirt", label: "搜同款亚麻短袖衬衫", bbox: { x: 31, y: 43, width: 38, height: 21 }, labelPosition: { x: 4, y: 43 }, productIds: ["linen-shirt-01"] },
+        { id: "linen-trousers", label: "搜同款米白阔腿裤", bbox: { x: 32, y: 62, width: 36, height: 30 }, labelPosition: { x: 55, y: 67 }, productIds: ["linen-trousers-01"] },
+      ],
+      products: [
+        { id: "linen-shirt-01", name: "米白亚麻翻领短袖衬衫", category: "衬衫", priceLabel: "¥329", imageUrl: linenRanchImage, imagePosition: "50% 49%", note: "自然褶皱与宽松领型保留老钱风的松弛感" },
+        { id: "linen-trousers-01", name: "垂感亚麻高腰阔腿裤", category: "裤装", priceLabel: "¥399", imageUrl: linenRanchImage, imagePosition: "51% 76%", note: "同色长裤延伸纵向比例，适合户外度假" },
+        { id: "linen-hat-01", name: "燕麦色宽檐巴拿马帽", category: "帽子", priceLabel: "¥159", imageUrl: linenRanchImage, imagePosition: "50% 37%", note: "帽檐为浅色套装增加清晰的旅行氛围" },
+        { id: "linen-belt-01", name: "深咖复古细皮带", category: "配饰", priceLabel: "¥129", imageUrl: linenRanchImage, imagePosition: "50% 61%", note: "小面积深色收紧腰线并呼应鞋履" },
+        { id: "linen-shirt-02", name: "奶油色古巴领衬衫", category: "衬衫", priceLabel: "¥289", imageUrl: linenRanchImage, imagePosition: "49% 50%", note: "相似领型与轻薄材质，通勤也容易搭配" },
+        { id: "linen-trousers-02", name: "象牙白宽松西装裤", category: "裤装", priceLabel: "¥359", imageUrl: linenRanchImage, imagePosition: "50% 78%", note: "保留宽腿轮廓，面料更适合城市穿着" },
+      ],
+      analysis: {
+        summary: "米白亚麻短袖衬衫与同色阔腿裤形成干净的纵向轮廓，深咖皮带和草帽压住浅色面积。牧场草地、白色围栏与复古汽车让这套 Look 很适合轻度假和户外约会。",
+        tags: ["男士亚麻", "老钱风", "牧场度假"],
+        questions: [
+          { id: "q1", question: "全身浅色会不会显得单调？", answer: "用深咖皮带、鞋和墨镜形成三个小面积锚点，既保留干净感，也能让比例更清楚。" },
+          { id: "q2", question: "亚麻衬衫怎样避免太居家？", answer: "选择有翻领和清晰门襟的款式，袖口保持利落，裤腰和鞋履也尽量整洁。" },
+          { id: "q3", question: "还能穿去哪些场景？", answer: "海边餐厅、周末市集、庄园婚礼和轻商务度假都适合这套低饱和搭配。" },
+        ],
+      },
+    },
+    {
+      id: "black-suit-look",
+      author: "沐洲✨",
+      avatarLabel: "沐",
+      title: "利落黑西装不只适合正式场合，收紧配色之后，氛围感会更集中。",
+      location: "酒店 · 室内",
+      audio: "少一点天分 · 原声",
+      videoUrl: "/media/videos/black-suit-look.mp4",
+      posterUrl: blackSuitImage,
+      counts: { likes: "61", comments: "19", saves: "7" },
+      eligible: true,
+      accent: "coral",
+      hotspots: [
+        { id: "black-shirt", label: "搜同款修身黑衬衫", bbox: { x: 31, y: 38, width: 41, height: 30 }, labelPosition: { x: 4, y: 43 }, productIds: ["black-shirt-01"] },
+        { id: "black-trousers", label: "搜同款黑色西装裤", bbox: { x: 37, y: 67, width: 35, height: 27 }, labelPosition: { x: 56, y: 71 }, productIds: ["black-trousers-01"] },
+      ],
+      products: [
+        { id: "black-shirt-01", name: "修身暗门襟黑色衬衫", category: "衬衫", priceLabel: "¥299", imageUrl: blackSuitImage, imagePosition: "52% 53%", note: "同色门襟减少视觉切割，轮廓更利落" },
+        { id: "black-trousers-01", name: "高腰垂感黑色西装裤", category: "裤装", priceLabel: "¥429", imageUrl: blackSuitImage, imagePosition: "53% 82%", note: "顺直裤线承接上身的窄长比例" },
+        { id: "black-tie-01", name: "哑光窄版黑色领带", category: "配饰", priceLabel: "¥99", imageUrl: blackSuitImage, imagePosition: "51% 38%", note: "哑光材质让全黑搭配保持细节层次" },
+        { id: "black-chain-01", name: "星芒胸针链条", category: "配饰", priceLabel: "¥139", imageUrl: blackSuitImage, imagePosition: "58% 45%", note: "银色小面积高光打破全黑造型的沉闷" },
+        { id: "black-shirt-02", name: "黑色翻领修身西装上衣", category: "外套", priceLabel: "¥599", imageUrl: blackSuitImage, imagePosition: "52% 55%", note: "相近窄身线条，正式感更强" },
+        { id: "black-shoes-01", name: "亮面方头德比鞋", category: "鞋履", priceLabel: "¥469", imageUrl: blackSuitImage, imagePosition: "52% 91%", note: "鞋面微光与胸针形成上下呼应" },
+      ],
+      analysis: {
+        summary: "黑衬衫、窄领带与黑色长裤把视觉重心集中在人物轮廓，星芒胸针链条提供少量高光。暖色酒店灯光柔化了全黑穿搭，适合晚宴、约会与室内写真。",
+        tags: ["全黑穿搭", "窄领带", "酒店氛围"],
+        questions: [
+          { id: "q1", question: "全黑穿搭怎样拍出层次？", answer: "让人物靠近侧光，用哑光衬衫、微亮领带和金属配饰形成不同反光层级。" },
+          { id: "q2", question: "日常穿会不会太正式？", answer: "去掉领带并把衬衫袖口卷起，换成简洁皮鞋或黑色运动鞋，就能降低正式度。" },
+          { id: "q3", question: "适合什么背景？", answer: "酒店走廊、深色咖啡馆、剧院和夜景街道都能衬托这套窄长黑色轮廓。" },
+        ],
+      },
+    },
+    {
+      id: "turquoise-beach-look",
+      author: "谢安人",
+      avatarLabel: "谢",
+      title: "夏天出去玩就这样拍转场，薄荷蓝衬衫和白色短裤把海水颜色穿在身上。",
+      location: "热带海岛 · 白沙滩",
+      audio: "海岛转场 · 原声",
+      videoUrl: "/media/videos/turquoise-beach-look.mp4",
+      posterUrl: turquoiseBeachImage,
+      counts: { likes: "18.5w", comments: "2085", saves: "2.2w" },
+      eligible: true,
+      accent: "cyan",
+      hotspots: [
+        { id: "turquoise-shirt", label: "搜同款薄荷蓝衬衫", bbox: { x: 25, y: 36, width: 51, height: 29 }, labelPosition: { x: 4, y: 40 }, productIds: ["turquoise-shirt-01"] },
+        { id: "white-shorts", label: "搜同款白色百慕大短裤", bbox: { x: 36, y: 61, width: 34, height: 24 }, labelPosition: { x: 55, y: 68 }, productIds: ["white-shorts-01"] },
+      ],
+      products: [
+        { id: "turquoise-shirt-01", name: "薄荷蓝轻量防晒衬衫", category: "衬衫", priceLabel: "¥269", imageUrl: turquoiseBeachImage, imagePosition: "50% 48%", note: "清透蓝绿色与近岸海水形成同色呼应" },
+        { id: "white-shorts-01", name: "象牙白百慕大短裤", category: "裤装", priceLabel: "¥239", imageUrl: turquoiseBeachImage, imagePosition: "51% 72%", note: "宽松裤腿适合海边步行和动态拍摄" },
+        { id: "knit-scarf-01", name: "奶油白针织披肩", category: "针织", priceLabel: "¥199", imageUrl: turquoiseBeachImage, imagePosition: "51% 39%", note: "肩部叠穿增加浅色造型的层次" },
+        { id: "beach-sandals-01", name: "深棕轻量夹趾凉鞋", category: "鞋履", priceLabel: "¥189", imageUrl: turquoiseBeachImage, imagePosition: "50% 91%", note: "深色鞋履稳定大面积明亮配色" },
+        { id: "turquoise-shirt-02", name: "湖水绿宽松度假衬衫", category: "衬衫", priceLabel: "¥299", imageUrl: turquoiseBeachImage, imagePosition: "49% 50%", note: "更宽松的相似款，适合泳装外搭" },
+        { id: "white-shorts-02", name: "白色抽绳沙滩短裤", category: "裤装", priceLabel: "¥179", imageUrl: turquoiseBeachImage, imagePosition: "51% 73%", note: "轻量替代款适合高温和涉水场景" },
+      ],
+      analysis: {
+        summary: "薄荷蓝宽松衬衫、奶油白披肩与白色百慕大短裤组成高明度海岛配色，深色墨镜和凉鞋补入对比。画面中的蓝绿色海水让整套 Look 很适合夏日转场和旅行短片。",
+        tags: ["男士海岛", "薄荷蓝", "夏日转场"],
+        questions: [
+          { id: "q1", question: "薄荷蓝显黑怎么办？", answer: "在脸部附近加入奶油白披肩或白色内搭，并选择偏灰、不过度荧光的蓝绿色。" },
+          { id: "q2", question: "短裤长度怎样选？", answer: "裤脚在膝盖上方约五到八厘米最容易保留利落比例，宽度要给腿部留出活动空间。" },
+          { id: "q3", question: "怎样拍出转场感？", answer: "先用衬衫或花束遮挡镜头，再在同一方向移开，保持人物中心位置一致即可自然衔接。" },
         ],
       },
     },
