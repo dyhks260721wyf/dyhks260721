@@ -189,6 +189,8 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
 
   function changeScreen(next: AppScreen) {
     setOpenSheet(null);
+    setSelectedProduct(null);
+    setTryOn((value) => ({ ...value, open: false }));
     setScreen(next);
     setActiveAsset(null);
   }
@@ -387,12 +389,22 @@ function RailAction({ children, label, active = false, onClick }: { children: Re
 function BottomNavigation({ active, onChange }: { active: AppScreen; onChange: (screen: AppScreen) => void }) {
   return (
     <nav className="bottom-nav" aria-label="主导航">
-      <button className={active === "feed" ? "active" : ""} type="button" onClick={() => onChange("feed")}><Home size={17} /><span>首页</span></button>
-      <button className={active === "friends" ? "active" : ""} type="button" onClick={() => onChange("friends")}><UserRound size={17} /><span>朋友</span></button>
-      <button className={`publish-button ${active === "publish" ? "active" : ""}`} type="button" aria-label="发布" onClick={() => onChange("publish")}><span><Plus size={20} /></span></button>
-      <button className={active === "messages" ? "active" : ""} type="button" onClick={() => onChange("messages")}><Bell size={17} /><span>消息</span></button>
-      <button className={active === "assets" ? "active" : ""} type="button" onClick={() => onChange("assets")}><User size={17} /><span>我</span></button>
+      <button className={active === "feed" ? "active" : ""} type="button" aria-current={active === "feed" ? "page" : undefined} onClick={() => onChange("feed")}><Home size={18} /><span>首页</span></button>
+      <button className={active === "friends" ? "active" : ""} type="button" aria-current={active === "friends" ? "page" : undefined} onClick={() => onChange("friends")}><UserRound size={18} /><span>朋友</span></button>
+      <button className={`publish-button ${active === "publish" ? "active" : ""}`} type="button" aria-label="发布" aria-current={active === "publish" ? "page" : undefined} onClick={() => onChange("publish")}><span><Plus size={20} /></span></button>
+      <button className={active === "messages" ? "active" : ""} type="button" aria-current={active === "messages" ? "page" : undefined} onClick={() => onChange("messages")}><Bell size={18} /><span>消息</span></button>
+      <button className={active === "assets" ? "active" : ""} type="button" aria-current={active === "assets" ? "page" : undefined} onClick={() => onChange("assets")}><User size={18} /><span>我</span></button>
     </nav>
+  );
+}
+
+function GeneratedImageStage({ src, alt, className = "", children }: { src: string; alt: string; className?: string; children?: React.ReactNode }) {
+  return (
+    <div className={`generated-image-stage ${className}`.trim()}>
+      <img className="generated-image-backdrop" src={src} alt="" aria-hidden="true" />
+      <img className="generated-image-full" src={src} alt={alt} />
+      {children}
+    </div>
   );
 }
 
@@ -834,8 +846,9 @@ function TryOnFlow({ video, entrySource, initialProfile, onClose, onSaveProfile,
 
         {step === 3 && resultUrl && (
           <div className="result-step">
-            <img className="result-image" src={resultUrl} alt="生成的场景穿搭结果" />
-            <div className="result-topline"><span><Sparkles size={14} /> {resultMode === "sol-image-generation" ? "Sol · AI 场景试穿" : "本地演示结果"}</span><small>{video.location}</small></div>
+            <GeneratedImageStage className="result-image-stage" src={resultUrl} alt="生成的场景穿搭结果">
+              <div className="result-topline"><span><Sparkles size={14} /> {resultMode === "sol-image-generation" ? "Sol · AI 场景试穿" : "本地演示结果"}</span><small>{video.location}</small></div>
+            </GeneratedImageStage>
             <div className="result-panel">
               <span className="result-emotion">这一刻，场景终于有了你的样子</span>
               <h4>你已经在这个场景里了。</h4>
@@ -983,7 +996,7 @@ function AssetDetailScreen({ asset, onBack, onPublish, onJumpOriginal, onOpenPro
   return (
     <section className="app-screen asset-detail-screen">
       <header className="floating-screen-header"><button type="button" onClick={onBack} aria-label="返回"><ArrowLeft size={21} /></button><span>AIGC 图片资产</span><button type="button" aria-label="更多"><MoreHorizontal size={21} /></button></header>
-      <img className="asset-detail-image" src={asset.imageUrl} alt={asset.description} />
+      <GeneratedImageStage className="asset-detail-image" src={asset.imageUrl} alt={asset.description} />
       <div className="asset-detail-content">
         <span className="asset-badge"><Sparkles size={13} />AI 场景穿搭 · {asset.createdAt}</span>
         <h2>这张照片，已经属于你的场景。</h2>
@@ -1004,7 +1017,7 @@ function PublishScreen({ asset, onBack, onJumpOriginal, onOpenProduct }: { asset
     <section className="app-screen publish-screen">
       <header className="publish-header"><button type="button" onClick={onBack} aria-label="返回"><ArrowLeft size={21} /></button><div><span>CREATE POST</span><h2>发布场景穿搭</h2></div><button className="publish-submit" type="button" disabled={published} onClick={() => setPublished(true)}>{published ? "已发布" : "发布"}</button></header>
       <div className="publish-scroll">
-        <div className="publish-preview"><img src={asset.imageUrl} alt="发布图片预览" /><span><Sparkles size={13} />AIGC 图片</span></div>
+        <GeneratedImageStage className="publish-preview" src={asset.imageUrl} alt="发布图片预览"><span><Sparkles size={13} />AIGC 图片</span></GeneratedImageStage>
         <label className="caption-field"><span>说说这张图</span><textarea value={caption} maxLength={180} onChange={(event) => setCaption(event.target.value)} /><small>{caption.length}/180</small></label>
         <button className="source-row" type="button" onClick={onJumpOriginal}><img src={asset.video.posterUrl} alt="原视频" /><div><span>使用原视频音乐</span><strong>{asset.video.audio}</strong><small>内容可溯源至 @{asset.video.author}</small></div><ChevronRight size={18} /></button>
         <div className="publish-options"><button type="button"><User size={17} />谁可以看 <span>公开 <ChevronRight size={15} /></span></button><button type="button"><Images size={17} />保存到相册 <span><CheckCircle2 size={16} /></span></button></div>
