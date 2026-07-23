@@ -1504,13 +1504,11 @@ function AssetLibraryScreen({ assets, videos, saved, onOpenAsset, onJumpOriginal
   const [tab, setTab] = useState<"works" | "daily" | "collection" | "liked">("works");
   const [collectionTab, setCollectionTab] = useState<"videos" | "outfits">("videos");
   const savedVideos = videos.filter((video) => saved.includes(video.id));
-  const coverAsset = assets[0] ?? null;
   const emptyState = <div className="profile-empty-state"><strong>暂无</strong></div>;
 
   return (
     <section className="app-screen asset-screen">
-      <div className={`douyin-profile-cover ${coverAsset ? "has-cover" : ""}`}>
-        {coverAsset && <img src={coverAsset.imageUrl} alt="个人主页背景" />}
+      <div className="douyin-profile-cover">
         <div className="douyin-profile-shade" />
         <div className="douyin-profile-identity">
           <div className="douyin-profile-avatar">镜<span>+</span></div>
