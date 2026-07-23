@@ -1,5 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import type { ProductPreset } from "@/lib/content";
+import { seedreamTryOnSystemPrompt, solTryOnSystemPrompt } from "@/lib/generation-prompts";
 import { updateUserContentProducts } from "@/lib/user-content";
 
 export type GenerationJobStatus = "queued" | "processing" | "completed" | "failed";
@@ -239,7 +240,7 @@ Create one personalized, photorealistic vertical fashion photograph from the sup
 
 REFERENCE ROLES
 - Image 1 is authoritative for the location, background identity, complete garment inventory, garment colors and materials, accessories, and lighting atmosphere.
-- Image 1 is NOT authoritative for the original model's body silhouette, exact pose, limb placement, head direction, subject placement, or camera crop. These must be re-staged.
+- Image 1 is authoritative for the original pose, limb placement, head direction, subject placement, camera angle and crop. Preserve them closely, making only the minimum anatomical adjustments needed to fit the personalized body naturally.
 - ${identityInstruction}
 
 PERSONALIZED BODY — MUST BE VISIBLY APPLIED
@@ -253,6 +254,10 @@ PRESERVE AND FINISH
 - Styling direction: ${input.outfitStyle}. Context: ${input.contentSummary}. Location: ${input.location}.
 - Show exactly one adult with natural anatomy and a coherent shadow/contact with the ground.
 - No text, logos, watermarks, duplicate people, extra limbs, invented garments or unrelated accessories.`);
+}
+
+function seedreamPromptFor(input: GenerationInput) {
+  return `${seedreamTryOnSystemPrompt}\n\n【当前任务与个性化数据】\n${promptFor(input)}`;
 }
 
 function solPromptFor(input: GenerationInput) {
@@ -294,7 +299,10 @@ async function runSolGeneration(job: GenerationJob, input: GenerationInput) {
       },
       body: JSON.stringify({
         model: process.env.SOL_ORCHESTRATOR_MODEL ?? "gpt-5.6-sol",
-        input: [{ role: "user", content }],
+        input: [
+          { role: "system", content: [{ type: "input_text", text: solTryOnSystemPrompt }] },
+          { role: "user", content },
+        ],
         tools: [{
           type: "image_generation",
           quality: "high",
@@ -384,7 +392,7 @@ async function runGeneration(job: GenerationJob, input: GenerationInput) {
       },
       body: JSON.stringify({
         model: process.env.IMAGE_API_MODEL ?? "doubao-seedream-5.0-lite",
-        prompt: promptFor(input),
+        prompt: seedreamPromptFor(input),
         image: referenceImages,
         size: process.env.IMAGE_API_SIZE ?? "2K",
         sequential_image_generation: "disabled",
