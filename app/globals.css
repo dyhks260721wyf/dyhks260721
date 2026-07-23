@@ -444,7 +444,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .rail-action > svg { width: 31px; height: 31px; }
 .rail-action span { font-size: 12px; }
 .pause-tryon-tag { border-radius: 7px 13px 13px 13px; background: rgba(23,24,29,.78); box-shadow: none; backdrop-filter: none; font-size: 12px; }
-.bottom-nav { padding-inline: 10px; border-top-color: rgba(255,255,255,.1); background: #08080a; box-shadow: none; backdrop-filter: none; }
+.bottom-nav { z-index: 1000; padding-inline: 10px; border-top-color: rgba(255,255,255,.1); background: #08080a; box-shadow: none; backdrop-filter: none; }
 .bottom-nav button:not(.publish-button) { min-height: 48px; gap: 3px; font-size: 11px; }
 .bottom-nav button:not(.publish-button) svg { width: 23px; height: 23px; }
 .publish-button span { width: 43px; height: 38px; border: 3px solid #17171b; border-radius: 11px; box-shadow: none; }
@@ -473,6 +473,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .camera-choice-card > p { font-size: 13px; }
 .camera-choice-card > div > button { min-height: 104px; border-color: var(--dy-divider); border-radius: var(--dy-r10); }
 .camera-choice-card > div > button:first-child { background: var(--dy-ink); border-color: var(--dy-ink); }
+
+/* Generation is app-global: it remains above every page and modal while the
+   bottom navigation stays available, matching the current web interaction. */
+.flow-layer { z-index: 900; }
 .camera-choice-card > div strong { font-size: 14px; }
 .camera-choice-card > div small, .camera-choice-card > small { font-size: 11px !important; }
 
@@ -562,7 +566,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .generation-progress { padding: 12px; border-radius: var(--dy-r10); background: #edf6f6; }
 .generation-progress strong { font-size: 13px; }
 .generation-progress small { font-size: 11px !important; }
-.generation-float { border: 0; border-radius: var(--dy-r14); background: rgba(22,24,29,.96); box-shadow: 0 8px 24px rgba(0,0,0,.26); backdrop-filter: none; }
+.generation-float { z-index: 1100; border: 0; border-radius: var(--dy-r14); background: rgba(22,24,29,.96); box-shadow: 0 8px 24px rgba(0,0,0,.26); backdrop-filter: none; }
 
 /* Results and shopping */
 .result-step, .result-scroll { height: calc(100% - 68px); background: #050506; }

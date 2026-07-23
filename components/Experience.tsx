@@ -120,7 +120,9 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
   const [commentTab, setCommentTab] = useState<CommentTab>("comments");
   const [pausedFrame, setPausedFrame] = useState<{ videoId: string; dataUrl: string } | null>(null);
   const [tryOn, setTryOn] = useState<{ open: boolean; source: EntrySource; videoId: string; sceneFrameDataUrl: string | null }>({ open: false, source: "pause_tag", videoId: initialVideos[0]?.id ?? "", sceneFrameDataUrl: null });
-  const [tryOnMinimized, setTryOnMinimized] = useState(false);
+  // Keep the minimized state synchronous so navigation in the same frame cannot
+  // accidentally unmount an in-flight generation task.
+  const tryOnMinimizedRef = useRef(false);
   const [saved, setSaved] = useState<string[]>([]);
   const [screen, setScreen] = useState<AppScreen>("feed");
   const [assets, setAssets] = useState<GeneratedAsset[]>([]);
@@ -207,7 +209,7 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
   function startTryOn(source: EntrySource, frameDataUrl: string | null = null) {
     const currentFrame = frameDataUrl ?? (pausedFrame?.videoId === activeVideo.id ? pausedFrame.dataUrl : null);
     setOpenSheet(null);
-    setTryOnMinimized(false);
+    tryOnMinimizedRef.current = false;
     setTryOn({ open: true, source, videoId: activeVideo.id, sceneFrameDataUrl: currentFrame });
   }
 
@@ -218,7 +220,7 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
   function changeScreen(next: AppScreen) {
     setOpenSheet(null);
     setSelectedProduct(null);
-    if (!tryOnMinimized) setTryOn((value) => ({ ...value, open: false }));
+    if (!tryOnMinimizedRef.current) setTryOn((value) => ({ ...value, open: false }));
     setScreen(next);
     setActiveAsset(null);
   }
@@ -256,8 +258,7 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
       setActiveIndex(index);
       setScreen("feed");
       setActiveAsset(null);
-      setTryOnMinimized(false);
-      setTryOn((value) => ({ ...value, open: false }));
+      if (!tryOnMinimizedRef.current) setTryOn((value) => ({ ...value, open: false }));
       requestAnimationFrame(() => feedRef.current?.scrollTo({ top: index * feedRef.current.clientHeight, behavior: "smooth" }));
     }
   }
@@ -342,12 +343,21 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
             entrySource={tryOn.source}
             sceneFrameDataUrl={tryOn.sceneFrameDataUrl}
             initialProfile={userProfile}
-            onClose={() => { setTryOnMinimized(false); setTryOn((value) => ({ ...value, open: false })); }}
-            onMinimizedChange={(minimized) => { setTryOnMinimized(minimized); if (minimized) { setPaused(false); setOpenSheet(null); } }}
+            onClose={() => { tryOnMinimizedRef.current = false; setTryOn((value) => ({ ...value, open: false })); }}
+            onMinimizedChange={(minimized) => {
+              tryOnMinimizedRef.current = minimized;
+              if (minimized) {
+                setPaused(false);
+                setOpenSheet(null);
+              } else {
+                setOpenSheet(null);
+                setSelectedProduct(null);
+              }
+            }}
             onSaveProfile={setUserProfile}
             onSaveAsset={saveAsset}
             onOpenProduct={setSelectedProduct}
-            onPublish={(asset) => { saveAsset(asset); setTryOnMinimized(false); setTryOn((value) => ({ ...value, open: false })); setScreen("publish"); }}
+            onPublish={(asset) => { saveAsset(asset); tryOnMinimizedRef.current = false; setTryOn((value) => ({ ...value, open: false })); setScreen("publish"); }}
           />
         )}
 
