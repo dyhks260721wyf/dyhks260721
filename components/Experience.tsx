@@ -74,6 +74,7 @@ type GeneratedAsset = {
   id: string;
   imageUrl: string;
   video: VideoPreset;
+  products?: ProductPreset[];
   description: string;
   createdAt: string;
 };
@@ -319,7 +320,7 @@ export function Experience({ initialVideos }: { initialVideos: VideoPreset[] }) 
             {screen === "friends" && <FriendsScreen videos={feedVideos} onJumpOriginal={jumpToOriginal} />}
             {screen === "messages" && <MessagesScreen />}
             {screen === "assets" && (activeAsset
-              ? <AssetDetailScreen asset={activeAsset} onBack={() => setActiveAsset(null)} onPublish={() => changeScreen("publish")} onJumpOriginal={() => jumpToOriginal(activeAsset.video.id)} />
+              ? <AssetDetailScreen asset={activeAsset} onBack={() => setActiveAsset(null)} onPublish={() => changeScreen("publish")} onJumpOriginal={() => jumpToOriginal(activeAsset.video.id)} onOpenProduct={setSelectedProduct} />
               : <AssetLibraryScreen assets={assets} videos={feedVideos} saved={saved} onOpenAsset={setActiveAsset} onJumpOriginal={jumpToOriginal} />)}
             {screen === "publish" && <PublishScreen asset={publishAsset} onBack={() => changeScreen("assets")} />}
           </div>
@@ -1167,6 +1168,7 @@ function TryOnFlow({ video, entrySource, sceneFrameDataUrl, initialProfile, onCl
       id: `${video.id}-${version.id}`,
       imageUrl: version.imageUrl,
       video: { ...video, products: version.products.length ? version.products : video.products },
+      products: version.products.length ? version.products : video.products,
       description: version.prompt === "初始生成"
         ? `在${video.location}的光线里，用我的比例和动作重新演绎这套 ${video.analysis.tags.slice(0, 2).join("、")} Look。`
         : `继续修改：${version.prompt}`,
@@ -1559,7 +1561,8 @@ function AssetLibraryScreen({ assets, videos, saved, onOpenAsset, onJumpOriginal
   );
 }
 
-function AssetDetailScreen({ asset, onBack, onPublish, onJumpOriginal }: { asset: GeneratedAsset; onBack: () => void; onPublish: () => void; onJumpOriginal: () => void }) {
+function AssetDetailScreen({ asset, onBack, onPublish, onJumpOriginal, onOpenProduct }: { asset: GeneratedAsset; onBack: () => void; onPublish: () => void; onJumpOriginal: () => void; onOpenProduct: (product: ProductPreset) => void }) {
+  const relatedProducts = asset.products?.length ? asset.products : asset.video.products;
   return (
     <section className="app-screen asset-detail-screen">
       <div className="asset-detail-visual">
@@ -1570,6 +1573,12 @@ function AssetDetailScreen({ asset, onBack, onPublish, onJumpOriginal }: { asset
         </button>
       </div>
       <div className="asset-detail-actions"><button type="button" onClick={onPublish}><Sparkles size={18} />一键发布</button><button type="button" onClick={onJumpOriginal}><Play size={17} />跳转原视频</button></div>
+      <section className="asset-detail-products" aria-labelledby="asset-products-title">
+        <div className="result-products-heading"><strong id="asset-products-title">购买相似商品</strong><ShoppingCart size={20} /></div>
+        {relatedProducts.length > 0
+          ? <div className="result-product-grid">{relatedProducts.map((product) => <ProductCard key={product.id} product={product} onOpen={() => onOpenProduct(product)} />)}</div>
+          : <div className="product-analysis-empty"><Search size={19} /><div><strong>暂未找到相关商品</strong><span>可以返回原视频，选择穿搭更清晰的画面重新生成。</span></div></div>}
+      </section>
     </section>
   );
 }
